@@ -1,4 +1,4 @@
-from pytest import skip
+import pytest
 from rubicon.objc import NSPoint
 
 from toga_cocoa.keys import NSEventModifierFlagCommand
@@ -22,7 +22,7 @@ class TableProbe(SimpleProbe):
 
     @property
     def font(self):
-        skip("Font changes not implemented for Tree on macOS")
+        pytest.skip("Font changes not implemented for Tree on macOS")
 
     @property
     def background_color(self):
@@ -30,6 +30,10 @@ class TableProbe(SimpleProbe):
             return toga_color(self.native.backgroundColor)
         else:
             return None
+
+    @property
+    def has_focus(self):
+        return self.native.window.firstResponder == self.native_table
 
     @property
     def row_count(self):
@@ -81,6 +85,9 @@ class TableProbe(SimpleProbe):
 
     def column_width(self, col):
         return self.native_table.tableColumns[col].width
+
+    async def resize_column(self, index, width):
+        self.native_table.tableColumns[index].width = width
 
     def row_position(self, row):
         # Pick a point half way across horizontally, and half way down the row,
@@ -145,10 +152,11 @@ class TableProbe(SimpleProbe):
             clickCount=2,
         )
 
-    async def acquire_keyboard_focus(self):
-        self.native_table.window.makeFirstResponder(
-            self.native_table
-        )  # switch to widget.focus() when possible (#2972).
-        # Insure first row is selected.
+    async def activate_header(self):
+        await self.activate_row(-1)
+        await self.redraw("Activating header")
+
+    async def select_first_row_keyboard(self):
+        # Use the keyboard to ensure first row is selected.
         await self.type_character("<down>")
         await self.type_character("<up>")

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import toga
 
@@ -7,8 +8,8 @@ from .libs import GTK_VERSION, Gdk, GdkPixbuf, GLib, Gtk
 
 
 class Icon:
-    EXTENSIONS = [".png", ".ico", ".icns"]
-    SIZES = [512, 256, 128, 72, 64, 32, 16]
+    EXTENSIONS: ClassVar[list[str]] = [".png", ".ico", ".icns"]
+    SIZES: ClassVar[list[int]] = [512, 256, 128, 72, 64, 32, 16]
 
     def __init__(self, interface, path):
         self.interface = interface
@@ -24,14 +25,16 @@ class Icon:
                 if (hicolor / f"{size}x{size}/apps/{toga.App.app.app_id}.png").is_file()
             }
 
-        self.paths = path
+        # Here self.paths might be a more accurate name, but self.path is used for
+        # compatibility with the core interface.
+        self.path = path
 
         if not path:
             raise FileNotFoundError("No icon variants found")
 
         # Preload all the required icon sizes
         try:
-            for size, path in self.paths.items():
+            for size, path in self.path.items():
                 if GTK_VERSION < (4, 0, 0):  # pragma: no-cover-if-gtk4
                     native = GdkPixbuf.Pixbuf.new_from_file(str(path)).scale_simple(
                         size, size, GdkPixbuf.InterpType.BILINEAR
@@ -44,11 +47,12 @@ class Icon:
         except GLib.GError as exc:
             raise ValueError(f"Unable to load icon from {path}") from exc
 
-    def native(self, size):
-        try:
-            return self._native[size]
-        except KeyError:
-            if GTK_VERSION < (4, 0, 0):  # pragma: no-cover-if-gtk4
+    if GTK_VERSION < (4, 0, 0):  # pragma: no-cover-if-gtk4
+
+        def native(self, size):
+            try:
+                return self._native[size]
+            except KeyError:
                 # self._native will have at least one entry, and it will have been
                 # populated in reverse size order, so the first value returned will
                 # be the largest size discovered.
@@ -57,5 +61,10 @@ class Icon:
                 )
                 self._native[size] = native
                 return native
-            else:  # pragma: no-cover-if-gtk3
-                return None
+    else:  # pragma: no-cover-if-gtk3
+
+        def native(self):
+            # On GTK4, the size of the image itself does not matter;  when it is
+            # used as an icon, its size can be modified using set_icon_size.  Use
+            # the image populated with the largest texture.
+            return self._native[max(self._native)]

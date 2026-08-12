@@ -1,7 +1,7 @@
 import asyncio
 
 import toga
-from toga.style.pack import COLUMN, Pack
+from toga.constants import COLUMN
 
 
 async def button_handler(widget):
@@ -43,16 +43,17 @@ class Tutorial2App(toga.App):
 
         data = [(f"root {i}", f"value {i}") for i in range(1, 100)]
 
-        left_container = toga.Table(headings=["Hello", "World"], data=data)
+        left_container = toga.Table(columns=["Hello", "World"], data=data)
 
-        right_content = toga.Box(style=Pack(direction=COLUMN, margin_top=50))
+        right_content = toga.Box(direction=COLUMN, margin_top=50)
 
         for b in range(10):
             right_content.add(
                 toga.Button(
                     f"Hello world {b}",
                     on_press=button_handler,
-                    style=Pack(width=200, margin=20),
+                    width=200,
+                    margin=20,
                 )
             )
 

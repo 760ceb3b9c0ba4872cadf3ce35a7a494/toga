@@ -7,7 +7,6 @@ from toga.sources.accessors import build_accessors, to_accessor
     "heading, accessor",
     [
         ("hello", "hello"),
-        ("hello", "hello"),
         ("Hello", "hello"),
         ("Hello1", "hello1"),
         ("Hello 1", "hello_1"),
@@ -83,8 +82,23 @@ def test_build_accessors(headings, overrides, accessors):
             r"Number of accessors must match number of headings",
         ),
         (
+            ["First Col", "Second Col", "Third Col"],
+            ["first", "second", "third", "fourth"],
+            r"Number of accessors must match number of headings",
+        ),
+        (
             ["!!", "Second Col", "Third Col"],
             None,
+            r"Unable to automatically generate accessor from heading '!!'",
+        ),
+        (
+            ["!!", "Second Col", "Third Col"],
+            [None, "second", "third"],
+            r"Unable to automatically generate accessor from heading '!!'",
+        ),
+        (
+            ["!!", "Second Col", "Third Col"],
+            {"Second Col": "second", "Third Col": "third"},
             r"Unable to automatically generate accessor from heading '!!'",
         ),
     ],

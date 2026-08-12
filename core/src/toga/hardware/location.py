@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import toga
 from toga.handlers import AsyncResult, PermissionResult, wrapped_handler
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 
 if TYPE_CHECKING:
     from toga.app import App
@@ -35,7 +35,7 @@ class OnLocationChangeHandler(Protocol):
 
 class Location:
     def __init__(self, app: App):
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._app = app
         self._impl = self.factory.Location(self)
 
@@ -51,7 +51,7 @@ class Location:
         """Does the app have permission to use location services?
 
         If the platform requires the user to explicitly confirm permission, and
-        the user has not yet given permission, this will return ``False``.
+        the user has not yet given permission, this will return `False`.
         """
         return self._impl.has_permission()
 
@@ -65,7 +65,7 @@ class Location:
         app is in the foreground. If you want your application to have permission to
         track location while the app is in the background, you must call this method,
         then make an *additional* permission request for background permissions using
-        :any:`Location.request_background_permission()`.
+        [`Location.request_background_permission()`][toga.hardware.location.Location.request_background_permission].
 
         **This is an asynchronous method**. If you invoke this method in synchronous
         context, it will start the process of requesting permissions, but will return
@@ -89,7 +89,7 @@ class Location:
         """Does the app have permission to use location services in the background?
 
         If the platform requires the user to explicitly confirm permission, and the user
-        has not yet given permission, this will return ``False``.
+        has not yet given permission, this will return `False`.
         """
         return self._impl.has_background_permission()
 
@@ -101,9 +101,10 @@ class Location:
         user.
 
         Before requesting background permission, you must first request and receive
-        foreground location permission using :any:`Location.request_permission`.
+        foreground location permission using
+        [`Location.request_permission`][toga.hardware.location.Location.request_permission].
         If you ask for background permission before receiving foreground location
-        permission, a :any:`PermissionError` will be raised.
+        permission, a [`PermissionError`][] will be raised.
 
         **This is an asynchronous method**. If you invoke this method in synchronous
         context, it will start the process of requesting permissions, but will return
@@ -124,8 +125,8 @@ class Location:
                     "before confirming foreground location permission."
                 )
             )
-        elif has_background_permission := self.has_background_permission:
-            result.set_result(has_background_permission)
+        elif self.has_background_permission:
+            result.set_result(True)
         else:
             self._impl.request_background_permission(result)
 
@@ -143,8 +144,8 @@ class Location:
     def start_tracking(self) -> None:
         """Start monitoring the user's location for changes.
 
-        An :any:`on_change` callback will be generated when the user's location
-        changes.
+        An [`on_change`][toga.hardware.location.Location.on_change] callback will be
+        generated when the user's location changes.
 
         :raises PermissionError: If the app has not requested and received permission to
             use location services.
@@ -173,18 +174,19 @@ class Location:
         """Obtain the user's current location using the location service.
 
         If the app hasn't requested and received permission to use location services, a
-        :any:`PermissionError` will be raised.
+        [`PermissionError`][] will be raised.
 
         **This is an asynchronous method**. If you call this method in a synchronous
         context, it will start the process of requesting the user's location, but will
         return *immediately*. The return value can be awaited in an asynchronous
         context, but cannot be used directly.
 
-        If location tracking is enabled, and an :any:`on_change` handler is installed,
+        If location tracking is enabled, and an
+        [`on_change`][toga.hardware.location.Location.on_change] handler is installed,
         requesting the current location may also cause that handler to be invoked.
 
         :returns: An asynchronous result; when awaited, returns the current
-            :any:`toga.LatLng` of the device.
+            [`toga.LatLng`][] of the device.
         :raises PermissionError: If the app has not requested and received permission to
             use location services.
         """

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from abc import ABC
 from builtins import id as identifier
+from functools import cached_property
 from os import environ
 from typing import TYPE_CHECKING, Any, TypeVar
 from warnings import warn
@@ -8,7 +10,7 @@ from warnings import warn
 from travertino.node import Node
 from travertino.style import BaseStyle
 
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 from toga.style import Pack, TogaApplicator
 from toga.style.mixin import style_mixin
 
@@ -16,7 +18,12 @@ if TYPE_CHECKING:
     from toga.app import App
     from toga.window import Window
 
+
 StyleT = TypeVar("StyleT", bound=BaseStyle)
+"""
+A type describing a style object. By default, this will be
+[Pack](/reference/api/style/pack.md), but Toga allows for other style representations.
+"""
 PackMixin = style_mixin(Pack)
 
 
@@ -36,11 +43,19 @@ DEBUG_BACKGROUND_PALETTE = [
 ]
 
 
-class Widget(Node, PackMixin):
+class Widget(Node, PackMixin, ABC):
     _MIN_WIDTH = 100
     _MIN_HEIGHT = 100
 
     DEBUG_LAYOUT_ENABLED = False
+    """Determines whether debug layout mode is enabled.
+
+    When enabled, container widgets use distinct background colors
+    to make the layout more visible and help identify issues during development.
+
+    See the [Debugging Your App][debug-layout] guide for more
+    information.
+    """
     _USE_DEBUG_BACKGROUND = False
     _debug_color_index = 0
 
@@ -79,9 +94,6 @@ class Widget(Node, PackMixin):
         self._window: Window | None = None
         self._app: App | None = None
 
-        # Get factory and assign implementation
-        self.factory = get_platform_factory()
-
         ##################################################################
         # 2024-12: Backwards compatibility for Toga < 0.5.0
         ##################################################################
@@ -104,11 +116,21 @@ class Widget(Node, PackMixin):
 
         self.applicator = TogaApplicator()
 
+    @cached_property
+    def factory(self):
+        return get_factory()
+
     def _create(self) -> Any:
         """Create a platform-specific implementation of this widget.
 
         A subclass of Widget should redefine this method to return its implementation.
         """
+        ##################################################################
+        # 2024-12: Backwards compatibility for Toga < 0.5.0
+        ##################################################################
+
+        # When this is removed, _create can be decorated as @abstractmethod.
+
         warn(
             (
                 "Widgets should create and return their implementation in ._create(). "
@@ -117,6 +139,10 @@ class Widget(Node, PackMixin):
             RuntimeWarning,
             stacklevel=2,
         )
+
+        #############################
+        # End backwards compatibility
+        #############################
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}:0x{identifier(self):x}>"
@@ -133,9 +159,11 @@ class Widget(Node, PackMixin):
     def tab_index(self) -> int | None:
         """The position of the widget in the focus chain for the window.
 
-        .. note::
+        /// note | Note
 
-            This is a beta feature. The ``tab_index`` API may change in the future.
+        This is a beta feature. The `tab_index` API may change in the future.
+
+        ///
         """
         return self._impl.get_tab_index()
 
@@ -158,6 +186,7 @@ class Widget(Node, PackMixin):
         :raises ValueError: If this widget cannot have children.
         """
         self._assert_can_have_children()
+        added = False
         for child in children:
             if child.parent is not self:
                 # remove from old parent
@@ -175,9 +204,11 @@ class Widget(Node, PackMixin):
                 super().add(child)
 
                 self._impl.add_child(child._impl)
+                added = True
 
         # Whatever layout we're a part of needs to be refreshed
-        self.refresh()
+        if added:
+            self.refresh()
 
     def insert(self, index: int, child: Widget) -> None:
         """Insert a widget as a child of this widget.
@@ -209,8 +240,8 @@ class Widget(Node, PackMixin):
 
             self._impl.insert_child(index, child._impl)
 
-        # Whatever layout we're a part of needs to be refreshed
-        self.refresh()
+            # Whatever layout we're a part of needs to be refreshed
+            self.refresh()
 
     def index(self, child: Widget) -> int:
         """Get the index of a widget in the list of children of this widget.
@@ -307,8 +338,8 @@ class Widget(Node, PackMixin):
         When setting the window for a widget, all children of this widget will be
         recursively assigned to the same window.
 
-        If the widget has a value for :any:`window`, it *must* also have a value for
-        :any:`app`.
+        If the widget has a value for [`window`][toga.Widget.window], it *must* also
+        have a value for [`app`][toga.Widget.app].
         """
         return self._window
 

@@ -1,5 +1,6 @@
 import asyncio
 import warnings
+from typing import ClassVar
 
 from android.content import Context
 from android.graphics.drawable import BitmapDrawable
@@ -13,6 +14,7 @@ from org.beeware.android import IPythonApp, MainActivity
 import toga
 from toga.command import Group, Separator
 from toga.dialogs import InfoDialog
+from toga_android.libs.webbrowser import register_webbrowser
 
 from .libs import events
 from .screens import Screen as ScreenImpl
@@ -20,9 +22,9 @@ from .screens import Screen as ScreenImpl
 
 class TogaApp(dynamic_proxy(IPythonApp)):
     last_requestcode = -1  # A unique ID for native background requests
-    running_intents = {}  # dictionary for currently running Intents
-    permission_requests = {}  # dictionary for outstanding permission requests
-    menuitem_mapping = {}  # dictionary for mapping menuitems to commands
+    running_intents: ClassVar[dict] = {}  # currently running Intents
+    permission_requests: ClassVar[dict] = {}  # outstanding permission requests
+    menuitem_mapping: ClassVar[dict] = {}  # maps menuitems to commands
 
     def __init__(self, app):
         super().__init__()
@@ -212,8 +214,11 @@ class App:
         self.interface = interface
         self.interface._impl = self
         self._listener = None
+        self._exiting_presentation = False
 
         self.loop = events.AndroidEventLoop()
+
+        register_webbrowser()
 
     @property
     def native(self):

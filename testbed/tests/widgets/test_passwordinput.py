@@ -2,6 +2,7 @@ import pytest
 
 import toga
 
+from ..conftest import skip_on_backends
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
     test_background_color,
@@ -33,6 +34,12 @@ from .test_textinput import (  # noqa: F401
     verify_vertical_text_align,
 )
 
+skip_on_backends(
+    "toga_textual",
+    reason="PasswordInput is not implemented on Textual.",
+    allow_module_level=True,
+)
+
 
 @pytest.fixture
 async def widget():
@@ -45,7 +52,7 @@ def verify_font_sizes():
     return False, True
 
 
-test_cleanup = build_cleanup_test(toga.PasswordInput, xfail_platforms=("android",))
+test_cleanup = build_cleanup_test(toga.PasswordInput)
 
 
 async def test_value_hidden(widget, probe):

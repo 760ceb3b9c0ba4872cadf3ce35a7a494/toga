@@ -7,6 +7,9 @@ import toga
 from ..data import TEXTS
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
+    test_background_color,
+    test_background_color_reset,
+    test_background_color_transparent,
     test_color,
     test_color_reset,
     test_enabled,
@@ -16,8 +19,8 @@ from .properties import (  # noqa: F401
     test_text_width_change,
 )
 
-# Switches can't be given focus on mobile, or on GTK
-if toga.platform.current_platform in {"android", "iOS", "linux"}:
+# Switches can't be given focus on mobile or GTK.
+if toga.backend in {"toga_gtk", "toga_android", "toga_iOS"}:
     from .properties import test_focus_noop  # noqa: F401
 else:
     from .properties import test_focus  # noqa: F401
@@ -29,7 +32,8 @@ async def widget():
 
 
 test_cleanup = build_cleanup_test(
-    toga.Switch, args=("Hello",), xfail_platforms=("android", "linux")
+    toga.Switch,
+    args=("Hello",),
 )
 
 

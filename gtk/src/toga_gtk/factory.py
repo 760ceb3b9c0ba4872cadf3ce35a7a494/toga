@@ -1,3 +1,5 @@
+import warnings
+
 from toga import NotImplementedWarning
 
 from . import dialogs
@@ -13,6 +15,7 @@ from .widgets.activityindicator import ActivityIndicator
 from .widgets.box import Box
 from .widgets.button import Button
 from .widgets.canvas import Canvas
+from .widgets.dateinput import DateInput
 from .widgets.detailedlist import DetailedList
 from .widgets.divider import Divider
 from .widgets.imageview import ImageView
@@ -34,56 +37,58 @@ from .widgets.tree import Tree
 from .widgets.webview import WebView
 from .window import MainWindow, Window
 
+warnings.warn(
+    "Factory modules are deprecated. Use 'toga.platform.get_factory' instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-def not_implemented(feature):
+
+def not_implemented(feature):  # pragma: no cover
     NotImplementedWarning.warn("GTK", feature)
 
 
 __all__ = [
-    "not_implemented",
-    "App",
-    "Command",
-    # Resources
-    "Font",
-    "Icon",
-    "Image",
-    "Paths",
-    "dialogs",
-    # Hardware
-    "Location",
-    # Status icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # Widgets
     "ActivityIndicator",
+    "App",
     "Box",
     "Button",
     "Canvas",
+    "Command",
+    "DateInput",
     "DetailedList",
     "Divider",
+    "Font",
+    "Icon",
+    "Image",
     "ImageView",
     "Label",
+    "Location",
+    "MainWindow",
     "MapView",
+    "MenuStatusIcon",
     "MultilineTextInput",
     "NumberInput",
     "OptionContainer",
     "PasswordInput",
+    "Paths",
     "ProgressBar",
     "ScrollContainer",
     "Selection",
+    "SimpleStatusIcon",
     "Slider",
     "SplitContainer",
+    "StatusIconSet",
     "Switch",
     "Table",
     "TextInput",
     "Tree",
     "WebView",
-    # Windows
-    "MainWindow",
     "Window",
+    "dialogs",
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's GTK backend doesn't implement {name}")

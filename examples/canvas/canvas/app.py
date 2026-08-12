@@ -1,13 +1,22 @@
 import math
 import sys
 
-from travertino.constants import BLACK, BLUE, BOLD, GREEN, ITALIC, NORMAL, RED, YELLOW
-
 import toga
-from toga.constants import Baseline, FillRule
+from toga.constants import (
+    BLACK,
+    BLUE,
+    BOLD,
+    COLUMN,
+    GREEN,
+    ITALIC,
+    NORMAL,
+    RED,
+    ROW,
+    YELLOW,
+    Baseline,
+    FillRule,
+)
 from toga.fonts import CURSIVE, FANTASY, MESSAGE, MONOSPACE, SANS_SERIF, SERIF, SYSTEM
-from toga.style import Pack
-from toga.style.pack import COLUMN, ROW
 
 MOVE_STEP = 5
 
@@ -24,6 +33,7 @@ ICE_CREAM = "ice cream"
 SMILE = "smile"
 SEA = "sea"
 STAR = "star"
+BEES_IMAGE = "bees"
 
 CONTINUOUS = "continuous"
 DASH_1_1 = "dash 1-1"
@@ -31,13 +41,16 @@ DASH_1_2 = "dash 1-2"
 DASH_2_3_1 = "dash 2-3-1"
 
 
-class ExampleCanvasApp(toga.App):
+class CanvasApp(toga.App):
     def startup(self):
         # Set up main window
         self.main_window = toga.MainWindow(size=(750, 500))
 
+        # Bitmap image for display.
+        self.image = toga.Image("resources/pride-brutus.png")
+
         self.canvas = toga.Canvas(
-            style=Pack(flex=1),
+            flex=1,
             on_resize=self.refresh_canvas,
             on_press=self.on_press,
             on_activate=self.on_activate,
@@ -48,9 +61,9 @@ class ExampleCanvasApp(toga.App):
             on_alt_release=self.on_alt_release,
         )
 
-        self.context_selection = toga.Selection(
+        self.state_selection = toga.Selection(
             items=[FILL, STROKE],
-            on_change=self.on_context_change,
+            on_change=self.on_state_change,
         )
         self.drawing_shape_instructions = {
             INSTRUCTIONS: self.draw_instructions,
@@ -63,6 +76,7 @@ class ExampleCanvasApp(toga.App):
             SMILE: self.draw_smile,
             SEA: self.draw_sea,
             STAR: self.draw_star,
+            BEES_IMAGE: self.draw_image,
         }
         self.dash_patterns = {
             CONTINUOUS: None,
@@ -128,17 +142,19 @@ class ExampleCanvasApp(toga.App):
         self.italic_switch = toga.Switch(text="italic", on_change=self.refresh_canvas)
         self.bold_switch = toga.Switch(text="bold", on_change=self.refresh_canvas)
 
-        row_style = Pack(direction=ROW, gap=10)
+        row_style = {"direction": ROW, "gap": 10}
 
         # Add the content on the main window
         box = toga.Box(
-            style=Pack(direction=COLUMN, gap=15, margin=10),
+            direction=COLUMN,
+            gap=15,
+            margin=10,
             children=[
                 toga.Box(
-                    style=row_style,
+                    **row_style,
                     children=[
                         toga.Label("Fill / Stroke:"),
-                        self.context_selection,
+                        self.state_selection,
                         toga.Label("Shape:"),
                         self.shape_selection,
                         toga.Label("Color:"),
@@ -146,7 +162,7 @@ class ExampleCanvasApp(toga.App):
                     ],
                 ),
                 toga.Box(
-                    style=row_style,
+                    **row_style,
                     children=[
                         toga.Label("Fill rule:"),
                         self.fill_rule_selection,
@@ -157,7 +173,7 @@ class ExampleCanvasApp(toga.App):
                     ],
                 ),
                 toga.Box(
-                    style=row_style,
+                    **row_style,
                     children=[
                         toga.Label("X Scale:"),
                         self.scale_x_slider,
@@ -169,7 +185,7 @@ class ExampleCanvasApp(toga.App):
                     ],
                 ),
                 toga.Box(
-                    style=row_style,
+                    **row_style,
                     children=[
                         toga.Label("Font Family:"),
                         self.font_selection,
@@ -188,7 +204,7 @@ class ExampleCanvasApp(toga.App):
         self.main_window.content = box
 
         self.change_shape()
-        self.change_context()
+        self.change_state()
         self.render_drawing()
 
         self.commands.add(
@@ -322,8 +338,8 @@ class ExampleCanvasApp(toga.App):
         self.change_shape()
         self.refresh_canvas(widget)
 
-    def on_context_change(self, widget):
-        self.change_context()
+    def on_state_change(self, widget):
+        self.change_state()
         self.refresh_canvas(widget)
 
     def on_press(self, widget, x, y):
@@ -401,12 +417,12 @@ class ExampleCanvasApp(toga.App):
         angle2 = math.atan2(v2[1], v2[0])
         return angle1 - angle2
 
-    def change_context(self):
-        is_stroke = self.context_selection.value == STROKE
+    def change_state(self):
+        is_stroke = self.state_selection.value == STROKE
         self.stroke_width_slider.enabled = is_stroke
         self.dash_pattern_selection.enabled = is_stroke
 
-        # Note: if more contexts are added, this will have to be checked separately.
+        # Note: if more states are added, this will have to be checked separately.
         self.fill_rule_selection.enabled = not is_stroke
 
     def change_shape(self):
@@ -421,36 +437,40 @@ class ExampleCanvasApp(toga.App):
         self.render_drawing()
 
     def render_drawing(self):
-        self.canvas.context.clear()
-        self.canvas.context.translate(
+        self.canvas.root_state.drawing_actions.clear()
+        self.canvas.translate(
             self.width / 2 + self.x_translation,
             self.height / 2 + self.y_translation,
         )
-        self.canvas.context.rotate(self.rotation)
-        self.canvas.context.scale(self.scale_x_slider.value, self.scale_y_slider.value)
-        self.canvas.context.translate(-self.width / 2, -self.height / 2)
-        with self.get_context() as context:
-            self.draw_shape(context)
-        self.canvas.context.reset_transform()
+        self.canvas.rotate(self.rotation)
+        self.canvas.scale(
+            self.scale_x_slider.value,
+            self.scale_y_slider.value,
+        )
+        self.canvas.translate(-self.width / 2, -self.height / 2)
+        with self.get_state():
+            self.draw_shape()
+        self.canvas.reset_transform()
 
-    def draw_shape(self, context):
+    def draw_shape(self):
         # Scale to the smallest axis to maintain aspect ratio
         factor = min(self.width, self.height)
         drawing_instructions = self.drawing_shape_instructions.get(
             self.shape_selection.value, None
         )
         if drawing_instructions is not None:
-            drawing_instructions(context, factor)
+            drawing_instructions(factor)
 
-    def draw_triangle(self, context, factor):
+    def draw_triangle(self, factor):
         # calculate offsets to centralize drawing in the bigger axis
         dx = self.x_middle - factor / 2
         dy = self.y_middle - factor / 2
-        with context.ClosedPath(dx + factor / 3, dy + factor / 3) as closer:
-            closer.line_to(dx + 2 * factor / 3, dy + 2 * factor / 3)
-            closer.line_to(dx + 2 * factor / 3, dy + factor / 3)
+        with self.canvas.close_path():
+            self.canvas.move_to(dx + factor / 3, dy + factor / 3)
+            self.canvas.line_to(dx + 2 * factor / 3, dy + 2 * factor / 3)
+            self.canvas.line_to(dx + 2 * factor / 3, dy + factor / 3)
 
-    def draw_triangles(self, context, factor):
+    def draw_triangles(self, factor):
         # calculate offsets to centralize drawing in the bigger axis
         triangle_size = factor / 5
         gap = factor / 12
@@ -460,54 +480,58 @@ class ExampleCanvasApp(toga.App):
             (gap, -2 * triangle_size),
             (-triangle_size, -triangle_size + gap),
         ]:
-            with context.Context() as triangle:
-                triangle.translate(self.x_middle + x, self.y_middle + y)
-                triangle.move_to(0, 0)
-                triangle.line_to(2 * triangle_size, 0)
-                triangle.line_to(triangle_size, triangle_size)
-                triangle.line_to(0, 0)
+            with self.canvas.state():
+                self.canvas.translate(self.x_middle + x, self.y_middle + y)
+                self.canvas.move_to(0, 0)
+                self.canvas.line_to(2 * triangle_size, 0)
+                self.canvas.line_to(triangle_size, triangle_size)
+                self.canvas.line_to(0, 0)
 
-    def draw_rectangle(self, context, factor):
-        context.rect(
+    def draw_rectangle(self, factor):
+        self.canvas.rect(
             self.x_middle - factor / 3,
             self.y_middle - factor / 6,
             2 * factor / 3,
             factor / 3,
         )
 
-    def draw_ellipse(self, context, factor):
+    def draw_ellipse(self, factor):
         rx = factor / 3
         ry = factor / 4
 
-        context.ellipse(self.width / 2, self.height / 2, rx, ry)
+        self.canvas.ellipse(self.width / 2, self.height / 2, rx, ry)
 
-    def draw_half_ellipse(self, context, factor):
+    def draw_half_ellipse(self, factor):
         rx = factor / 3
         ry = factor / 4
 
-        with context.ClosedPath(self.x_middle + rx, self.y_middle) as closer:
-            closer.ellipse(self.x_middle, self.y_middle, rx, ry, 0, 0, math.pi)
+        with self.canvas.close_path():
+            self.canvas.move_to(self.x_middle + rx, self.y_middle)
+            self.canvas.ellipse(self.x_middle, self.y_middle, rx, ry, 0, 0, math.pi)
 
-    def draw_ice_cream(self, context, factor):
+    def draw_ice_cream(self, factor):
         dx = self.x_middle
         dy = self.y_middle - factor / 6
-        with context.ClosedPath(dx - factor / 5, dy) as closer:
-            closer.arc(dx, dy, factor / 5, math.pi, 2 * math.pi)
-            closer.line_to(dx, dy + 2 * factor / 5)
+        with self.canvas.close_path():
+            self.canvas.move_to(dx - factor / 5, dy)
+            self.canvas.arc(dx, dy, factor / 5, math.pi, 2 * math.pi)
+            self.canvas.line_to(dx, dy + 2 * factor / 5)
 
-    def draw_smile(self, context, factor):
+    def draw_smile(self, factor):
         dx = self.x_middle
         dy = self.y_middle - factor / 5
-        with context.ClosedPath(dx - factor / 5, dy) as closer:
-            closer.quadratic_curve_to(dx, dy + 3 * factor / 5, dx + factor / 5, dy)
-            closer.quadratic_curve_to(dx, dy + factor / 5, dx - factor / 5, dy)
+        with self.canvas.close_path():
+            self.canvas.move_to(dx - factor / 5, dy)
+            self.canvas.quadratic_curve_to(dx, dy + 3 * factor / 5, dx + factor / 5, dy)
+            self.canvas.quadratic_curve_to(dx, dy + factor / 5, dx - factor / 5, dy)
 
-    def draw_sea(self, context, factor):
-        with context.ClosedPath(
-            self.x_middle - 1 * factor / 5,
-            self.y_middle - 1 * factor / 5,
-        ) as closer:
-            closer.bezier_curve_to(
+    def draw_sea(self, factor):
+        with self.canvas.close_path():
+            self.canvas.move_to(
+                self.x_middle - 1 * factor / 5,
+                self.y_middle - 1 * factor / 5,
+            )
+            self.canvas.bezier_curve_to(
                 self.x_middle - 1 * factor / 10,
                 self.y_middle,
                 self.x_middle + 1 * factor / 10,
@@ -515,50 +539,65 @@ class ExampleCanvasApp(toga.App):
                 self.x_middle + 1 * factor / 5,
                 self.y_middle - 1 * factor / 5,
             )
-            closer.line_to(
+            self.canvas.line_to(
                 self.x_middle + 1 * factor / 5,
                 self.y_middle + 1 * factor / 5,
             )
-            closer.line_to(
+            self.canvas.line_to(
                 self.x_middle - 1 * factor / 5,
                 self.y_middle + 1 * factor / 5,
             )
 
-    def draw_star(self, context, factor):
+    def draw_star(self, factor):
         sides = 5
         radius = factor / 5
         rotation_angle = 4 * math.pi / sides
-        with context.ClosedPath(self.x_middle, self.y_middle - radius) as closer:
+        with self.canvas.close_path():
+            self.canvas.move_to(self.x_middle, self.y_middle - radius)
             for i in range(1, sides):
-                closer.line_to(
+                self.canvas.line_to(
                     self.x_middle + radius * math.sin(i * rotation_angle),
                     self.y_middle - radius * math.cos(i * rotation_angle),
                 )
 
-    def draw_instructions(self, context, factor):
-        text = """Instructions:
-1. Use the controls to modify the image
-2. Press and drag to move the image
-3. Double press to center the image at that position
-4. Drag using the alternate (e.g. right) button to rotate the image
-"""
+    def draw_image(self, factor):
+        self.canvas.draw_image(
+            self.image,
+            self.x_middle - self.image.width / 2,
+            self.y_middle - self.image.height / 2,
+        )
+
+    def draw_instructions(self, factor):
+        text = (
+            "Instructions:\n"
+            "1. Use the controls to modify the image\n"
+            "2. Press and drag to move the image\n"
+            "3. Double press to center the image at that position\n"
+            "4. Drag using the alternate (e.g. right) button to rotate the image"
+        )
+
         font = toga.Font(
             family=self.font_selection.value,
             size=self.font_size.value,
             weight=self.get_weight(),
             style=self.get_style(),
         )
-        width, height = self.canvas.measure_text(
+        width, _height = self.canvas.measure_text(
             text, font, self.line_height_slider.value
         )
-        context.write_text(
-            text,
-            self.x_middle - width / 2,
-            self.y_middle,
-            font,
-            Baseline.MIDDLE,
-            self.line_height_slider.value,
-        )
+        text_kwargs = {
+            "text": text,
+            "x": self.x_middle - width / 2,
+            "y": self.y_middle,
+            "font": font,
+            "baseline": Baseline.MIDDLE,
+            "line_height": self.line_height_slider.value,
+        }
+        if self.state_selection.value == STROKE:
+            self.canvas.stroke_text(**text_kwargs)
+        else:
+            self.canvas.fill_text(**text_kwargs)
+        self.canvas.redraw()
 
     def get_weight(self):
         return BOLD if self.bold_switch.value else NORMAL
@@ -566,21 +605,21 @@ class ExampleCanvasApp(toga.App):
     def get_style(self):
         return ITALIC if self.italic_switch.value else NORMAL
 
-    def get_context(self):
-        if self.context_selection.value == STROKE:
-            return self.canvas.Stroke(
-                color=str(self.color_selection.value),
+    def get_state(self):
+        if self.state_selection.value == STROKE:
+            return self.canvas.stroke(
+                stroke_style=str(self.color_selection.value),
                 line_width=self.stroke_width_slider.value,
                 line_dash=self.dash_patterns[self.dash_pattern_selection.value],
             )
-        return self.canvas.Fill(
-            color=self.color_selection.value,
+        return self.canvas.fill(
             fill_rule=FillRule[self.fill_rule_selection.value],
+            fill_style=self.color_selection.value,
         )
 
 
 def main():
-    return ExampleCanvasApp("Canvas", "org.beeware.toga.examples.canvas")
+    return CanvasApp("Canvas", "org.beeware.toga.examples.canvas")
 
 
 if __name__ == "__main__":

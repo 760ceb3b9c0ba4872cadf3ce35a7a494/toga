@@ -2,23 +2,23 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Literal, TypeVar, Union, overload
+from typing import TYPE_CHECKING, Generic, Literal, TypeVar, overload
 
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 
 if TYPE_CHECKING:
     from toga.window import Window
 
 
 __all__ = [
-    "InfoDialog",
-    "QuestionDialog",
     "ConfirmDialog",
     "ErrorDialog",
-    "StackTraceDialog",
-    "SaveFileDialog",
+    "InfoDialog",
     "OpenFileDialog",
+    "QuestionDialog",
+    "SaveFileDialog",
     "SelectFolderDialog",
+    "StackTraceDialog",
 ]
 
 DialogResultT = TypeVar("DialogResultT")
@@ -28,14 +28,15 @@ class Dialog(Generic[DialogResultT]):
     """A base class for dialogs.
 
     These classes are not displayed directly. To use them, pass a
-    :class:`~toga.dialogs.Dialog` instance to :meth:`~toga.Window.dialog()` (for a
-    window-modal dialog), or :meth:`~toga.App.dialog()` for an app-level dialog.
+    [`Dialog`][toga.dialogs.Dialog] instance to [`Window.dialog()`][toga.Window.dialog]
+    (for a window-modal dialog), or [`App.dialog()`][toga.App.dialog] for an
+    app-level dialog.
     """
 
     def _show(self, window: Window | None) -> asyncio.Future[DialogResultT]:
         """Display the dialog and return the user's response.
 
-        :param window: The window for which the dialog should be modal; or ``None`` for
+        :param window: The window for which the dialog should be modal; or `None` for
             an app-level dialog.
         :returns: A future capturing the user's response to the dialog
         """
@@ -50,12 +51,12 @@ class InfoDialog(Dialog[None]):
 
         Presents as a dialog with a single "OK" button to close the dialog.
 
-        Returns a response of ``None``.
+        Returns a response of `None`.
 
         :param title: The title of the dialog window.
         :param message: The message to display.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.InfoDialog(title=title, message=message)
 
 
@@ -65,13 +66,13 @@ class QuestionDialog(Dialog[bool]):
 
         Presents as a dialog with "Yes" and "No" buttons.
 
-        Returns a response of ``True`` when the "Yes" button is pressed, ``False`` when
+        Returns a response of `True` when the "Yes" button is pressed, `False` when
         the "No" button is pressed.
 
         :param title: The title of the dialog window.
         :param message: The question to be answered.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.QuestionDialog(title=title, message=message)
 
 
@@ -82,13 +83,13 @@ class ConfirmDialog(Dialog[bool]):
         Presents as a dialog with "Cancel" and "OK" buttons (or whatever labels are
         appropriate on the current platform).
 
-        Returns a response of ``True`` when the "OK" button is pressed, ``False`` when
+        Returns a response of `True` when the "OK" button is pressed, `False` when
         the "Cancel" button is pressed.
 
         :param title: The title of the dialog window.
         :param message: A message describing the action to be confirmed.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.ConfirmDialog(title=title, message=message)
 
 
@@ -98,12 +99,12 @@ class ErrorDialog(Dialog[None]):
 
         Presents as an error dialog with an "OK" button to close the dialog.
 
-        Returns a response of ``None``.
+        Returns a response of `None`.
 
         :param title: The title of the dialog window.
         :param message: The error message to display.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.ErrorDialog(title=title, message=message)
 
 
@@ -131,10 +132,10 @@ class StackTraceDialog(Dialog[DialogResultT]):
     ) -> None:
         """Open a dialog to display a large block of text, such as a stack trace.
 
-        If ``retry`` is true, returns a response of ``True`` when the user selects
-        "Retry", and ``False`` when they select "Quit".
+        If `retry` is true, returns a response of `True` when the user selects
+        "Retry", and `False` when they select "Quit".
 
-        If ``retry`` is ``False``, returns a response of ``None``.
+        If `retry` is `False`, returns a response of `None`.
 
         :param title: The title of the dialog window.
         :param message: Contextual information about the source of the stack trace.
@@ -142,7 +143,7 @@ class StackTraceDialog(Dialog[DialogResultT]):
         :param retry: If true, the user will be given options to "Retry" or "Quit"; if
             false, a single option to acknowledge the error will be displayed.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.StackTraceDialog(
             title=title,
             message=message,
@@ -151,7 +152,7 @@ class StackTraceDialog(Dialog[DialogResultT]):
         )
 
 
-class SaveFileDialog(Dialog[Union[Path, None]]):
+class SaveFileDialog(Dialog[Path | None]):
     def __init__(
         self,
         title: str,
@@ -162,7 +163,7 @@ class SaveFileDialog(Dialog[Union[Path, None]]):
 
         This dialog is not currently supported on Android or iOS.
 
-        Returns a path object for the selected file location, or ``None`` if the user
+        Returns a path object for the selected file location, or `None` if the user
         cancelled the save operation.
 
         If the filename already exists, the user will be prompted to confirm they want
@@ -181,7 +182,7 @@ class SaveFileDialog(Dialog[Union[Path, None]]):
             initial_directory = None
         filename = suggested_path.name
 
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.SaveFileDialog(
             title=title,
             filename=filename,
@@ -221,22 +222,22 @@ class OpenFileDialog(Dialog[DialogResultT]):
 
         This dialog is not currently supported on Android or iOS.
 
-        If ``multiple_select`` is ``True``, returns a list of ``Path`` objects.
+        If `multiple_select` is `True`, returns a list of `Path` objects.
 
-        If ``multiple_select`` is ``False``, returns a single ``Path``.
+        If `multiple_select` is `False`, returns a single `Path`.
 
-        Returns ``None`` if the open operation is cancelled by the user.
+        Returns `None` if the open operation is cancelled by the user.
 
         :param title: The title of the dialog window
         :param initial_directory: The initial folder in which to open the dialog. If
-            ``None``, use the default location provided by the operating system (which
+            `None`, use the default location provided by the operating system (which
             will often be the last used location)
         :param file_types: The allowed filename extensions, without leading dots. If not
             provided, all files will be shown.
         :param multiple_select: If True, the user will be able to select multiple files;
             if False, the selection will be restricted to a single file.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.OpenFileDialog(
             title=title,
             initial_directory=Path(initial_directory) if initial_directory else None,
@@ -273,21 +274,21 @@ class SelectFolderDialog(Dialog[DialogResultT]):
 
         This dialog is not currently supported on Android or iOS.
 
-        If ``multiple_select`` is ``True``, returns a list of ``Path`` objects.
+        If `multiple_select` is `True`, returns a list of `Path` objects.
 
-        If ``multiple_select`` is ``False``, returns a single ``Path``.
+        If `multiple_select` is `False`, returns a single `Path`.
 
-        Returns ``None`` if the select operation is cancelled by the user.
+        Returns `None` if the select operation is cancelled by the user.
 
         :param title: The title of the dialog window
         :param initial_directory: The initial folder in which to open the dialog. If
-            ``None``, use the default location provided by the operating system (which
+            `None`, use the default location provided by the operating system (which
             will often be "last used location")
         :param multiple_select: If True, the user will be able to select multiple
             directories; if False, the selection will be restricted to a single
             directory. This option is not supported on WinForms.
         """
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.dialogs.SelectFolderDialog(
             title=title,
             initial_directory=Path(initial_directory) if initial_directory else None,

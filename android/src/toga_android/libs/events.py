@@ -81,7 +81,6 @@ class AndroidEventLoop(asyncio.SelectorEventLoop):
             raise RuntimeError(
                 "Event loop is closed. Create a new object."
             )  # pragma: no cover
-        self._set_coroutine_origin_tracking(self._debug)
         self._thread_id = threading.get_ident()
 
         self._old_agen_hooks = sys.get_asyncgen_hooks()
@@ -105,7 +104,6 @@ class AndroidEventLoop(asyncio.SelectorEventLoop):
             self._stopping = False
             self._thread_id = None
             asyncio.events._set_running_loop(None)
-            self._set_coroutine_origin_tracking(False)
             sys.set_asyncgen_hooks(*self._old_agen_hooks)
             # Remove Android event loop interop objects.
             self.android_interop = None
@@ -125,13 +123,6 @@ class AndroidEventLoop(asyncio.SelectorEventLoop):
         # that running delayed tasks can trigger the next wakeup is what makes this
         # event loop a "loop."
         self.android_interop.call_later(self.run_delayed_tasks, timeout * 1000)
-
-    def _set_coroutine_origin_tracking(self, debug):
-        # If running on Python 3.7 or 3.8, integrate with upstream event loop's debug
-        # feature, allowing unawaited coroutines to have some useful info logged.
-        # See https://bugs.python.org/issue32591
-        if hasattr(super(), "_set_coroutine_origin_tracking"):  # pragma: no cover
-            super()._set_coroutine_origin_tracking(debug)
 
     def _get_next_delayed_task_wakeup(self):
         """Compute the time to sleep before we should be woken up
@@ -302,13 +293,14 @@ class AndroidSelector(selectors.SelectSelector):
     def register(self, fileobj, events, data=None):
         if self._debug:  # pragma: no cover
             print(f"register() fileobj={fileobj} events={events} data={data}")
-        ret = super().register(fileobj, events, data=data)
-        self.register_with_android(fileobj, events)
-        return ret
+        key = super().register(fileobj, events, data=data)
+        self.register_with_android(key.fd, events)
+        return key
 
     def unregister(self, fileobj):  # pragma: no cover
-        self.message_queue.removeOnFileDescriptorEventListener(_create_java_fd(fileobj))
-        return super().unregister(fileobj)
+        key = super().unregister(fileobj)
+        self.message_queue.removeOnFileDescriptorEventListener(_create_java_fd(key.fd))
+        return key
 
     def reregister_with_android_soon(self, fileobj):
         def _reregister():
@@ -330,14 +322,14 @@ class AndroidSelector(selectors.SelectSelector):
         # completion before re-registering.
         self.loop.call_later(0, _reregister)
 
-    def register_with_android(self, fileobj, events):
+    def register_with_android(self, fd, events):
         if self._debug:  # pragma: no cover
-            print(f"register_with_android() fileobj={fileobj} events={events}")
+            print(f"register_with_android() fd={fd} events={events}")
         # `events` is a bitset comprised of `selectors.EVENT_READ` and
         # `selectors.EVENT_WRITE`. Register this FD for read and/or write events from
         # Android.
         self.message_queue.addOnFileDescriptorEventListener(
-            _create_java_fd(fileobj),
+            _create_java_fd(fd),
             # Passing `events` as-is because Android and Python use the same values for
             # read & write events.
             events,

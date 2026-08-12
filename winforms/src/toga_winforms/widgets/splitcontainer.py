@@ -5,9 +5,9 @@ from System.Windows.Forms import (
 )
 
 from toga.constants import Direction
+from toga.handlers import WeakrefCallable
 
 from ..container import Container
-from ..libs.wrapper import WeakrefCallable
 from .base import Widget
 
 
@@ -30,7 +30,11 @@ class SplitContainer(Widget):
         super().set_bounds(x, y, width, height)
 
         force_refresh = False
-        if self.pending_position:
+        # Discard invalid layouts here, and wait until the height
+        # has been properly computed to apply the split.  This is
+        # necessary as a 0/0 proportion cannot be preserved in the
+        # native layer.
+        if self.pending_position and width and height:
             self.set_position(self.pending_position)
             self.pending_position = None
             force_refresh = True  # Content has changed
@@ -43,7 +47,7 @@ class SplitContainer(Widget):
         for panel in self.panels:
             panel.clear_content()
 
-        for panel, widget in zip(self.panels, content):
+        for panel, widget in zip(self.panels, content, strict=False):
             panel.set_content(widget)
 
         self.pending_position = flex[0] / sum(flex)

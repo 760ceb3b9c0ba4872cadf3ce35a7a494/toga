@@ -1,4 +1,3 @@
-
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -8,6 +7,28 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      # Check for updates on Sunday, 8PM UTC
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      # Check for updates on Sunday, 8PM UTC
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/toga"
@@ -16,6 +37,18 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "pip"
+    directory: "/demo"
+    schedule:
+      # Check for updates on Sunday, 8PM UTC
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/core"
@@ -24,6 +57,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/android"
@@ -32,6 +67,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/cocoa"
@@ -40,6 +77,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/dummy"
@@ -48,6 +87,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/gtk"
@@ -56,6 +97,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/iOS"
@@ -64,6 +107,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/positron"
@@ -72,6 +117,18 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "pip"
+    directory: "/qt"
+    schedule:
+      # Check for updates on Sunday, 8PM UTC
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/testbed"
@@ -83,6 +140,18 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: "pip"
+    directory: "/textual"
+    schedule:
+      # Check for updates on Sunday, 8PM UTC
+      interval: "weekly"
+      day: "sunday"
+      time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/travertino"
@@ -91,6 +160,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/web"
@@ -99,6 +170,8 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/winforms"
@@ -107,3 +180,5 @@ updates:
       interval: "weekly"
       day: "sunday"
       time: "20:00"
+    cooldown:
+      default-days: 7

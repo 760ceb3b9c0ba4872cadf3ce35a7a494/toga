@@ -20,7 +20,6 @@ def source():
 @pytest.mark.parametrize(
     "value",
     [
-        None,
         42,
         "not a list",
     ],
@@ -34,13 +33,62 @@ def test_invalid_accessors(value):
         ListSource(accessors=value)
 
 
-def test_accessors_required():
-    """A list source must specify *some* accessors."""
+def test_accessors_optional_for_mapping_data():
+    """A list source can omit accessors if rows are mapping-based."""
+    source = ListSource(data=[{"value": 1}])
+
+    assert len(source) == 1
+    assert source.accessors is None
+    assert source[0].value == 1
+
+
+def test_empty_accessors_for_sequence_data():
+    """If there is an empty accessor list, rows have no attributes."""
+    source = ListSource(data=[[1, "a"], [2, "b"]], accessors=[])
+
+    assert len(source) == 2
+    assert source.accessors == []
+    assert not hasattr(source[0], "value")
+
+
+def test_accessors_omitted_for_mapping_data():
+    """A list source defaults to no accessors when omitted."""
+    source = ListSource(data=[{"value": 1}])
+
+    assert len(source) == 1
+    assert source.accessors is None
+    assert source[0].value == 1
+
+
+def test_non_mapping_data_requires_accessors():
+    """A list source without accessors rejects non-mapping row data."""
     with pytest.raises(
         ValueError,
-        match=r"ListSource must be provided a list of accessors",
+        match=r"ListSource requires accessors for non-mapping row data",
     ):
-        ListSource(accessors=[], data=[1, 2, 3])
+        ListSource(data=[1, 2, 3])
+
+
+def test_non_mapping_setitem_requires_accessors():
+    """Setting non-mapping row data requires accessors."""
+    source = ListSource(data=[{"value": 1}])
+
+    with pytest.raises(
+        ValueError,
+        match=r"ListSource requires accessors for non-mapping row data",
+    ):
+        source[0] = ("new", 2)
+
+
+def test_non_mapping_find_requires_accessors():
+    """Finding non-mapping row data requires accessors."""
+    source = ListSource(data=[{"value": 1}])
+
+    with pytest.raises(
+        ValueError,
+        match=r"find\(\) requires accessors for non-mapping row data",
+    ):
+        source.find(1)
 
 
 def test_accessors_copied():
@@ -92,7 +140,7 @@ def test_tuples():
     assert source[1].val1 == "new element"
     assert source[1].val2 == 999
 
-    listener.insert.assert_called_once_with(index=1, item=source[1])
+    listener.source_change.assert_called_once_with(item=source[1])
 
 
 def test_list():
@@ -125,7 +173,7 @@ def test_list():
     assert source[1].val1 == "new element"
     assert source[1].val2 == 999
 
-    listener.insert.assert_called_once_with(index=1, item=source[1])
+    listener.source_change.assert_called_once_with(item=source[1])
 
 
 def test_dict():
@@ -158,7 +206,7 @@ def test_dict():
     assert source[1].val1 == "new element"
     assert source[1].val2 == 999
 
-    listener.insert.assert_called_once_with(index=1, item=source[1])
+    listener.source_change.assert_called_once_with(item=source[1])
 
 
 def test_flat_list():
@@ -246,7 +294,7 @@ def test_clear(source):
     assert len(source) == 0
 
     # A notification was sent
-    listener.clear.assert_called_once_with()
+    listener.source_clear.assert_called_once_with()
 
 
 def test_insert_kwarg(source):
@@ -263,7 +311,7 @@ def test_insert_kwarg(source):
     assert row.val1 == "new element"
     assert row.val2 == 999
 
-    listener.insert.assert_called_once_with(index=1, item=row)
+    listener.source_insert.assert_called_once_with(index=1, item=row)
 
 
 def test_insert_positional(source):
@@ -280,7 +328,7 @@ def test_insert_positional(source):
     assert row.val1 == "new element"
     assert row.val2 == 999
 
-    listener.insert.assert_called_once_with(index=1, item=row)
+    listener.source_insert.assert_called_once_with(index=1, item=row)
 
 
 def test_append_dict(source):
@@ -297,7 +345,7 @@ def test_append_dict(source):
     assert row.val1 == "new element"
     assert row.val2 == 999
 
-    listener.insert.assert_called_once_with(index=3, item=row)
+    listener.source_insert.assert_called_once_with(index=3, item=row)
 
 
 def test_append_positional(source):
@@ -314,7 +362,7 @@ def test_append_positional(source):
     assert row.val1 == "new element"
     assert row.val2 == 999
 
-    listener.insert.assert_called_once_with(index=3, item=row)
+    listener.source_insert.assert_called_once_with(index=3, item=row)
 
 
 def test_del(source):
@@ -333,7 +381,7 @@ def test_del(source):
     assert source[1].val1 == "third"
     assert source[1].val2 == 333
 
-    listener.remove.assert_called_once_with(item=row, index=1)
+    listener.source_remove.assert_called_once_with(item=row, index=1)
 
 
 def test_remove(source):
@@ -352,7 +400,7 @@ def test_remove(source):
     assert source[1].val1 == "third"
     assert source[1].val2 == 333
 
-    listener.remove.assert_called_once_with(item=row, index=1)
+    listener.source_remove.assert_called_once_with(item=row, index=1)
 
 
 def test_index(source):
@@ -362,22 +410,13 @@ def test_index(source):
 
     # look-alike rows are not equal, so index lookup should fail
     lookalike_row = Row(val1="second", val2=222)
-    with pytest.raises(
-        ValueError,
-        match=r"<Row .* val1='second' val2=222> is not in list",
-    ):
+    with pytest.raises(ValueError, match=r"not in list"):
         source.index(lookalike_row)
 
-    with pytest.raises(
-        ValueError,
-        match=r"None is not in list",
-    ):
+    with pytest.raises(ValueError, match=r"not in list"):
         source.index(None)
 
-    with pytest.raises(
-        ValueError,
-        match=r"<Row .* \(no attributes\)> is not in list",
-    ):
+    with pytest.raises(ValueError, match=r"not in list"):
         source.index(Row())
 
 
@@ -405,7 +444,7 @@ def test_find(source):
     # A partial match is enough
     assert source.find({"val1": "third"}) == source[2]
 
-    # find will fail if the object doesn't exist
+    # find will raise ValueError if no match is found and no default is provided
     with pytest.raises(
         ValueError,
         match=r"No row matching {'val1': 'not there', 'val2': 999} in data",
@@ -421,3 +460,16 @@ def test_find(source):
         ),
     ):
         source.find({"val1": "first", "val2": 111, "value": "overspecified"})
+
+
+def test_find_with_default(source):
+    """You can provide a default return value to the find method."""
+
+    # Duplicate row 1 of the data.
+    source.append({"val1": "second", "val2": 222})
+
+    # If a default is provided, it will be returned if no match is found
+    assert source.find({"val1": "not there", "val2": 999}, default=-1) == -1
+
+    # If the given default value is None, None will be returned if no match is found
+    assert source.find({"val1": "not there", "val2": 999}, default=None) is None

@@ -1,8 +1,8 @@
 from unittest.mock import Mock
 
-from pytest import approx
+from pytest import skip
 
-from toga.colors import CORNFLOWERBLUE, RED, TRANSPARENT, color as named_color
+from toga.colors import CORNFLOWERBLUE, RED, TRANSPARENT, Color
 from toga.fonts import (
     BOLD,
     FANTASY,
@@ -86,6 +86,9 @@ async def test_focus(widget, probe, other, other_probe, verify_focus_handlers):
 
     if verify_focus_handlers:
         on_gain_handler.assert_not_called()
+
+        # Reset the mock so it can be tested again
+        on_lose_handler.reset_mock()
 
     other.focus()
     await probe.redraw("Focus has been lost")
@@ -255,7 +258,7 @@ async def test_placeholder_color(widget, probe):
     await probe.redraw("Value is set, color is red")
     assert probe.value == "Hello"
     assert not probe.placeholder_visible
-    assert_color(probe.color, named_color(RED))
+    assert_color(probe.color, Color.parse(RED))
 
     widget.value = ""
     await probe.redraw("Value is empty, placeholder is visible")
@@ -267,11 +270,14 @@ async def test_placeholder_color(widget, probe):
     await probe.redraw("Value is set, color is still red")
     assert probe.value == "Hello"
     assert not probe.placeholder_visible
-    assert_color(probe.color, named_color(RED))
+    assert_color(probe.color, Color.parse(RED))
 
 
 async def test_text_width_change(widget, probe):
     "If the widget text is changed, the width of the widget changes"
+    if not getattr(probe, "supports_text_width_change", True):
+        skip("The backend renders these text samples at the same width.")
+
     orig_width = probe.width
 
     # Change the text to something long
@@ -368,7 +374,7 @@ async def test_color_reset(widget, probe):
     # Set the color to something different
     widget.style.color = RED
     await probe.redraw("Widget foreground color should be RED")
-    assert_color(probe.color, named_color(RED))
+    assert_color(probe.color, Color.parse(RED))
 
     # Reset the color, and check that it has been restored to the original
     del widget.style.color
@@ -392,7 +398,7 @@ async def test_background_color_reset(widget, probe):
     # Set the background color to something different
     widget.style.background_color = RED
     await probe.redraw("Widget background color should be RED")
-    assert_background_color(probe.background_color, named_color(RED))
+    assert_background_color(probe.background_color, Color.parse(RED))
 
     # Reset the background color, and check that it has been restored to the original
     del widget.style.background_color
@@ -485,8 +491,8 @@ async def test_flex_widget_size(widget, probe):
 
     # Check the initial widget size
     # Match isn't exact because of pixel scaling on some platforms
-    assert probe.width == approx(300, rel=0.01)
-    assert probe.height == approx(200, rel=0.01)
+    assert probe.width == probe.approx_width(300)
+    assert probe.height == probe.approx_height(200)
 
     # Drop the fixed height, and make the widget flexible
     widget.style.flex = 1
@@ -494,7 +500,7 @@ async def test_flex_widget_size(widget, probe):
 
     # Widget should now be 300 pixels wide, but as tall as the container.
     await probe.redraw("Widget should be 300px wide, full height")
-    assert probe.width == approx(300, rel=0.01)
+    assert probe.width == probe.approx_width(300)
     assert probe.height > 350
 
     # Make the parent a COLUMN box
@@ -511,14 +517,14 @@ async def test_flex_widget_size(widget, probe):
 
     await probe.redraw("Widget should be full width, 150px high")
     assert probe.width > 350
-    assert probe.height == approx(150, rel=0.01)
+    assert probe.height == probe.approx_height(150)
 
     # Revert to fixed width
     widget.style.width = 250
 
     await probe.redraw("Widget should be reverted to fixed width")
-    assert probe.width == approx(250, rel=0.01)
-    assert probe.height == approx(150, rel=0.01)
+    assert probe.width == probe.approx_width(250)
+    assert probe.height == probe.approx_height(150)
 
 
 async def test_flex_horizontal_widget_size(widget, probe):
@@ -526,7 +532,7 @@ async def test_flex_horizontal_widget_size(widget, probe):
     # Container is initially a non-flex row box.
     # Initial widget size is small (but non-zero), based on content size.
     probe.assert_width(1, 300)
-    probe.assert_height(1, 55)
+    probe.assert_height(1, getattr(probe, "minimum_required_height", 55))
     original_height = probe.height
 
     # Make the widget flexible; it will expand to fill horizontal space

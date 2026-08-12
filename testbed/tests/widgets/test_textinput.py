@@ -9,6 +9,7 @@ from toga.style.pack import RIGHT, SERIF
 
 from ..data import TEXTS
 from .conftest import build_cleanup_test
+from .probe import get_probe
 from .properties import (  # noqa: F401
     test_background_color,
     test_background_color_reset,
@@ -54,7 +55,7 @@ async def placeholder(request, widget):
     widget.placeholder = request.param
 
 
-test_cleanup = build_cleanup_test(toga.TextInput, xfail_platforms=("android",))
+test_cleanup = build_cleanup_test(toga.TextInput)
 
 
 async def test_value_not_hidden(widget, probe):
@@ -107,6 +108,31 @@ async def test_on_change_user(widget, probe, on_change):
         expected = "Hello world"[:count]
         assert probe.value == expected
         assert widget.value == expected
+
+
+async def test_on_change_user_after_initial_value(main_window):
+    "User input triggers on_change after setting the initial value before mounting."
+    old_content = main_window.content
+    widget = toga.TextInput(value="Hello")
+    on_change = Mock()
+    widget.on_change = on_change
+
+    try:
+        main_window.content = toga.Box(children=[widget])
+        probe = get_probe(widget)
+        await probe.redraw("TextInput with initial value has been mounted")
+        on_change.assert_not_called()
+
+        widget.focus()
+        probe.set_cursor_at_end()
+        await probe.type_character("!")
+        await probe.redraw("Typed into TextInput after initial value")
+
+        on_change.assert_called_once_with(widget)
+        assert widget.value == "Hello!"
+        assert probe.value == "Hello!"
+    finally:
+        main_window.content = old_content
 
 
 @pytest.mark.parametrize(
@@ -269,16 +295,18 @@ async def test_undo_redo(widget, probe):
     assert probe.value == text_1
 
     # undo
+    expected_text = text_0 if probe.redo_available else ""
     await probe.undo()
-    await probe.redraw(f"Widget value should be {text_0!r}")
-    assert widget.value == text_0
-    assert probe.value == text_0
+    await probe.redraw(f"Widget value should be {expected_text!r}")
+    assert widget.value == expected_text
+    assert probe.value == expected_text
 
     # redo
+    expected_text = text_1 if probe.redo_available else ""
     await probe.redo()
-    await probe.redraw(f"Widget value should be {text_1!r}")
-    assert widget.value == text_1
-    assert probe.value == text_1
+    await probe.redraw(f"Widget value should be {expected_text!r}")
+    assert widget.value == expected_text
+    assert probe.value == expected_text
 
 
 async def test_no_event_on_initialization(widget, probe, on_change):
@@ -309,3 +337,46 @@ async def test_no_event_on_style_change(widget, probe, on_change):
     await probe.redraw("Text color has been changed")
     on_change.assert_not_called()
     on_change.reset_mock()
+
+
+@pytest.mark.parametrize(
+    "action, select, undo",
+    [
+        ("Undo", False, False),
+        ("Redo", False, True),
+        ("Cut", True, False),
+        ("Paste", False, False),
+    ],
+)
+async def test_edit_readonly_noop(widget, probe, app_probe, action, select, undo):
+    """Attempting to invoke edit actions with a readonly TextInput should
+    not change anything"""
+    if not app_probe.edit_menu_noop_enabled:
+        pytest.xfail("Platform does not have Edit menu that enables but no-ops")
+    widget.focus()
+    await probe.redraw("Widget focused")
+    widget.value = "About to be readonly"
+    await probe.redraw("Initial text is setup with focus")
+    await probe.type_character("x")
+    await probe.redraw("Typed x")
+    await probe.type_character("y")
+    await probe.redraw("Typed y")
+    if undo:
+        await probe.undo()  # Undo once so Redo has potential to do things
+    initial_text = widget.value
+
+    widget.readonly = True
+    if select:
+        probe.select_range(len(probe.value) - 2, 2)
+        await probe.redraw("Range selected")
+    app_probe.perform_edit_action(action)
+    await probe.redraw("Edit action performed; should be no-op")
+    assert widget.value == initial_text
+
+    widget.readonly = False
+    await probe.redraw("Widget is no longer readonly")
+    app_probe.perform_edit_action(action)
+    await probe.redraw("Widget is no longer readonly")
+
+    # Non-readonly performs an action.
+    assert widget.value != initial_text

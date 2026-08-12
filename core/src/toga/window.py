@@ -12,7 +12,7 @@ from toga.command import CommandSet
 from toga.constants import WindowState
 from toga.handlers import AsyncResult, wrapped_handler
 from toga.images import Image
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 from toga.types import Position, Size
 
 if TYPE_CHECKING:
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from toga.screens import Screen
     from toga.types import PositionT, SizeT
     from toga.widgets.base import Widget
-
 
 _window_count = -1
 
@@ -35,10 +34,10 @@ def _initial_position() -> Position:
 
     :returns: The position for the new window.
     """
-    # Each new window created without an explicit position is positioned
-    # 50px down and to the right from the previous window, with the first
-    # window positioned at (100, 100). Every 15 windows, move back to a
-    # y coordinate of 100, and start from 50 pixels further right.
+    # Each new window created without an explicit position is positioned 50px down and
+    # to the right from the previous window, with the first window positioned at
+    # (100, 100). Every 15 windows, move back to a y coordinate of 100, and start from
+    # 50 pixels further right.
     global _window_count
     _window_count += 1
 
@@ -95,13 +94,12 @@ class OnCloseHandler(Protocol):
     def __call__(self, window: Window, **kwargs: Any) -> bool:
         """A handler to invoke when a window is about to close.
 
-        The return value of this callback controls whether the window
-        is allowed to close.
-        This can be used to prevent a window closing with unsaved changes, etc.
+        The return value of this callback controls whether the window is allowed to
+        close. This can be used to prevent a window closing with unsaved changes, etc.
 
         :param window: The window instance that is closing.
         :param kwargs: Ensures compatibility with arguments added in future versions.
-        :returns: ``True`` if the window is allowed to close; ``False`` if the window
+        :returns: `True` if the window is allowed to close; `False` if the window
             is not allowed to close.
         """
         ...
@@ -159,6 +157,25 @@ class OnHideHandler(Protocol):
         ...
 
 
+class OnResizeHandler(Protocol):
+    def __call__(self, window: Window, **kwargs: Any) -> None:
+        """A handler to invoke when a window resizes.
+
+        This event is also triggered when any change in available layout size occurs.
+        However, a change in visibility (e.g. when a window is hidden or minimized)
+        does not cause a change in layout size and therefore, the event will not be
+        triggered.
+
+        On mobile platforms, it is also triggered when the orientation of the device is
+        changed.
+
+        :param window: The window instance that resizes.
+        :param kwargs: Ensures compatibility with additional arguments introduced in
+            future versions.
+        """
+        ...
+
+
 _DialogResultT = TypeVar("_DialogResultT", contravariant=True)
 
 
@@ -167,8 +184,8 @@ class DialogResultHandler(Protocol[_DialogResultT]):
         """A handler to invoke when a dialog is closed.
 
         :param window: The window that opened the dialog.
-        :param kwargs: Ensures compatibility with arguments added in future versions.
         :param result: The result returned by the dialog.
+        :param kwargs: Ensures compatibility with arguments added in future versions.
         """
 
 
@@ -198,6 +215,7 @@ class Window:
         on_lose_focus: OnLoseFocusHandler | None = None,
         on_show: OnShowHandler | None = None,
         on_hide: OnHideHandler | None = None,
+        on_resize: OnResizeHandler | None = None,
         content: Widget | None = None,
     ) -> None:
         """Create a new Window.
@@ -205,14 +223,14 @@ class Window:
         :param id: A unique identifier for the window. If not provided, one will be
             automatically generated.
         :param title: Title for the window. Defaults to the formal name of the app.
-        :param position: Position of the window, as a :any:`toga.Position` or tuple of
-            ``(x, y)`` coordinates, in :ref:`CSS pixels <css-units>`.
-        :param size: Size of the window, as a :any:`toga.Size` or tuple of ``(width,
-            height)``, in :ref:`CSS pixels <css-units>`.
+        :param position: Position of the window, as a [`toga.Position`][] or tuple of
+            `(x, y)` coordinates, in [CSS pixels][css-units].
+        :param size: Size of the window, as a [`toga.Size`][] or tuple of `(width,
+            height)`, in [CSS pixels][css-units].
         :param resizable: Can the window be resized by the user?
         :param closable: Can the window be closed by the user?
         :param minimizable: Can the window be minimized by the user?
-        :param on_close: The initial :any:`on_close` handler.
+        :param on_close: The initial [`on_close`][toga.Window.on_close] handler.
         :param content: The initial content for the window.
         """
         # Needs to be a late import to avoid circular dependencies.
@@ -233,7 +251,21 @@ class Window:
         if App.app is None:
             raise RuntimeError("Cannot create a Window before creating an App")
 
-        self.factory = get_platform_factory()
+        # Initialize event handlers to no-op defaults BEFORE creating the
+        # implementation. Some platforms (Cocoa, .NET Framework 4.x WinForms) fire
+        # resize / focus callbacks during impl construction, before the explicit
+        # `self.on_X = ...` assignments below have run. Without these defaults the
+        # dispatched callback raises AttributeError on `self._on_resize` /
+        # `self._on_gain_focus` / etc. See beeware/toga#4347 (resize during init on
+        # macOS) and #4357(gain_focus on .NET Framework 4.x).
+        self.on_close = None
+        self.on_gain_focus = None
+        self.on_lose_focus = None
+        self.on_show = None
+        self.on_hide = None
+        self.on_resize = None
+
+        self.factory = get_factory()
         self._impl = getattr(self.factory, self._WINDOW_CLASS)(
             interface=self,
             title=title if title else self._default_title,
@@ -248,12 +280,14 @@ class Window:
         if content:
             self.content = content
 
+        # Set up the event handlers on the interface (overrides the no-op defaults
+        # installed above with the user-supplied handlers).
         self.on_close = on_close
-
         self.on_gain_focus = on_gain_focus
         self.on_lose_focus = on_lose_focus
         self.on_show = on_show
         self.on_hide = on_hide
+        self.on_resize = on_resize
 
     def __lt__(self, other: Window) -> bool:
         return self.id < other.id
@@ -264,7 +298,7 @@ class Window:
 
     @property
     def app(self) -> App:
-        """The :any:`App` that this window belongs to (read-only).
+        """The [`App`][toga.App] that this window belongs to (read-only).
 
         New windows are automatically associated with the currently active app."""
         return self._app
@@ -321,20 +355,20 @@ class Window:
     def close(self) -> None:
         """Close the window.
 
-        This *does not* invoke the ``on_close`` handler. If the window being closed
-        is the app's main window, it will trigger ``on_exit`` handling; otherwise, the
-        window will be immediately and unconditionally closed.
+        This *does not* invoke the `on_close` handler. If the window being closed is the
+        app's main window, it will trigger `on_exit` handling; otherwise, the window
+        will be immediately and unconditionally closed.
 
         Once a window has been closed, it *cannot* be reused. The behavior of any method
-        or property on a :class:`~toga.Window` instance after it has been closed is
-        undefined, except for :attr:`closed` which can be used to check if the window
-        was closed.
+        or property on a [`Window`][toga.Window] instance after it has been closed is
+        undefined, except for [`closed`][toga.Window.closed] which can be used to check
+        if the window was closed.
 
         :returns: True if the window was actually closed; False if closing the window
-            triggered ``on_exit`` handling.
+            triggered `on_exit` handling.
         """
         close_window = True
-        if self.app.main_window == self:
+        if self.app.main_window is self:
             # Closing the window marked as the main window is a request to exit.
             self.app.request_exit()
             close_window = False
@@ -372,8 +406,7 @@ class Window:
         return self._closed
 
     def show(self) -> None:
-        """Show the window. If the window is already visible, this method has no
-        effect.
+        """Show the window. If the window is already visible, this method has no effect.
 
         :raises ValueError: If the window is currently in a minimized, full screen or
             presentation state.
@@ -423,7 +456,7 @@ class Window:
     def widgets(self) -> FilteredWidgetRegistry:
         """The widgets contained in the window.
 
-        Can be used to look up widgets by ID (e.g., ``window.widgets["my_id"]``).
+        Can be used to look up widgets by ID (e.g., `window.widgets["my_id"]`).
         """
         return FilteredWidgetRegistry(self)
 
@@ -433,10 +466,11 @@ class Window:
 
     @property
     def size(self) -> Size:
-        """Size of the window, in :ref:`CSS pixels <css-units>`.
+        """Size of the window, in [CSS pixels][css-units].
 
         :raises RuntimeError: If resize is requested while in
-            :any:`WindowState.FULLSCREEN` or :any:`WindowState.PRESENTATION`.
+            [`WindowState.FULLSCREEN`][toga.constants.WindowState.FULLSCREEN] or
+            [`WindowState.PRESENTATION`][toga.constants.WindowState.PRESENTATION].
         """
         return self._impl.get_size()
 
@@ -455,12 +489,13 @@ class Window:
 
     @property
     def position(self) -> Position:
-        """Absolute position of the window, in :ref:`CSS pixels <css-units>`.
+        """Absolute position of the window, in [CSS pixels][css-units].
 
         The origin is the top left corner of the primary screen.
 
         :raises RuntimeError: If position change is requested while in
-            :any:`WindowState.FULLSCREEN` or :any:`WindowState.PRESENTATION`.
+            [`WindowState.FULLSCREEN`][toga.constants.WindowState.FULLSCREEN] or
+            [`WindowState.PRESENTATION`][toga.constants.WindowState.PRESENTATION].
         """
         absolute_origin = self._app.screens[0].origin
         absolute_window_position = self._impl.get_position()
@@ -478,7 +513,8 @@ class Window:
 
     @property
     def screen(self) -> Screen:
-        """Instance of the :class:`toga.Screen` on which this window is present."""
+        """Instance of the [`toga.Screen`][toga.screens.Screen] on which this window
+        is present."""
         return self._impl.get_current_screen().interface
 
     @screen.setter
@@ -491,10 +527,11 @@ class Window:
     @property
     def screen_position(self) -> Position:
         """Position of the window with respect to current screen, in
-        :ref:`CSS pixels <css-units>`.
+        [CSS pixels][css-units].
 
         :raises RuntimeError: If position change is requested while in
-            :any:`WindowState.FULLSCREEN` or :any:`WindowState.PRESENTATION`.
+            [`WindowState.FULLSCREEN`][toga.constants.WindowState.FULLSCREEN] or
+            [`WindowState.PRESENTATION`][toga.constants.WindowState.PRESENTATION].
         """
         return self.position - self.screen.origin
 
@@ -510,8 +547,7 @@ class Window:
     ######################################################################
 
     def hide(self) -> None:
-        """Hide the window. If the window is already hidden, this method has no
-        effect.
+        """Hide the window. If the window is already hidden, this method has no effect.
 
         :raises ValueError: If the window is currently in a minimized, full screen or
             presentation state.
@@ -546,14 +582,16 @@ class Window:
     def state(self) -> WindowState:
         """The current state of the window.
 
-        When the window is in transition, then this will return the state it
-        is transitioning towards, instead of the actual instantaneous state.
+        When the window is in transition, then this will return the state it is
+        transitioning towards, instead of the actual instantaneous state.
 
         :raises RuntimeError: If state change is requested while the window is
             hidden.
 
-        :raises ValueError: If any state other than :any:`WindowState.MINIMIZED`
-            or :any:`WindowState.NORMAL` is requested on a non-resizable window.
+        :raises ValueError: If any state other than
+            [`WindowState.MINIMIZED`][toga.constants.WindowState.MINIMIZED]
+            or [`WindowState.NORMAL`][toga.constants.WindowState.NORMAL]
+            is requested on a non-resizable window.
         """
         # There are 2 types of window states that we can get from the backend:
         # * The instantaneous state -- Used internally on implementation side
@@ -584,12 +622,12 @@ class Window:
     def as_image(self, format: type[ImageT] = Image) -> ImageT:
         """Render the current contents of the window as an image.
 
-        :param format: Format to provide. Defaults to :class:`~toga.images.Image`; also
-            supports :any:`PIL.Image.Image` if Pillow is installed, as well as any image
-            types defined by installed :doc:`image format plugins
-            </reference/plugins/image_formats>`.
+        :param format: Format to provide. Defaults to [`Image`][toga.images.Image]; also
+            supports [`PIL.Image.Image`][] if Pillow is installed, as well as any image
+            types defined by installed
+            [image format plugins](/reference/api/resources/image/image-format-plugins.md).
         :returns: An image containing the window content, in the format requested.
-        """
+        """  # noqa: E501
         return Image(self._impl.get_image_data()).as_format(format)
 
     async def dialog(
@@ -597,7 +635,9 @@ class Window:
     ) -> dialogs.DialogResultT:
         """Display a dialog to the user, modal to this window.
 
-        :param: The :doc:`dialog <resources/dialogs>` to display to the user.
+        :param dialog: The
+            [toga.Window.dialog](/reference/api/application/dialogs.md) to
+            display to the user.
         :returns: The result of the dialog.
         """
         return await dialog._show(self)
@@ -655,6 +695,15 @@ class Window:
     def on_hide(self, handler):
         self._on_hide = wrapped_handler(self, handler)
 
+    @property
+    def on_resize(self) -> OnResizeHandler:
+        """The handler to invoke when the window resizes."""
+        return self._on_resize
+
+    @on_resize.setter
+    def on_resize(self, handler):
+        self._on_resize = wrapped_handler(self, handler)
+
     ######################################################################
     # 2024-06: Backwards compatibility for <= 0.4.5
     ######################################################################
@@ -665,7 +714,8 @@ class Window:
         message: str,
         on_result: DialogResultHandler[None] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with an :any:`InfoDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with an
+        [`InfoDialog`][toga.InfoDialog]"""
         warnings.warn(
             "info_dialog(...) has been deprecated; use dialog(toga.InfoDialog(...))",
             DeprecationWarning,
@@ -686,7 +736,8 @@ class Window:
         message: str,
         on_result: DialogResultHandler[bool] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with a :any:`QuestionDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with a
+        [`QuestionDialog`][toga.QuestionDialog]"""
         warnings.warn(
             (
                 "question_dialog(...) has been deprecated; "
@@ -710,7 +761,8 @@ class Window:
         message: str,
         on_result: DialogResultHandler[bool] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with a :any:`ConfirmDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with a
+        [`ConfirmDialog`][toga.ConfirmDialog]"""
         warnings.warn(
             (
                 "confirm_dialog(...) has been deprecated; "
@@ -734,7 +786,8 @@ class Window:
         message: str,
         on_result: DialogResultHandler[None] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with an :any:`ErrorDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with an
+        [`ErrorDialog`][toga.ErrorDialog]"""
         warnings.warn(
             "error_dialog(...) has been deprecated; use dialog(toga.ErrorDialog(...))",
             DeprecationWarning,
@@ -757,7 +810,8 @@ class Window:
         retry: bool = False,
         on_result: DialogResultHandler[bool] | DialogResultHandler[None] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with a :any:`StackTraceDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with a
+        [`StackTraceDialog`][toga.StackTraceDialog]"""
         warnings.warn(
             (
                 "stack_trace_dialog(...) has been deprecated; "
@@ -787,7 +841,8 @@ class Window:
         file_types: list[str] | None = None,
         on_result: DialogResultHandler[Path | None] | None = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with a :any:`SaveFileDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with a
+        [`SaveFileDialog`][toga.SaveFileDialog]"""
         warnings.warn(
             (
                 "save_file_dialog(...) has been deprecated; "
@@ -821,7 +876,8 @@ class Window:
             | None
         ) = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with an :any:`OpenFileDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with an
+        [`OpenFileDialog`][toga.OpenFileDialog]"""
         warnings.warn(
             (
                 "open_file_dialog(...) has been deprecated; "
@@ -855,7 +911,8 @@ class Window:
             | None
         ) = None,
     ) -> Dialog:
-        """**DEPRECATED** - await :meth:`dialog` with a :any:`SelectFolderDialog`"""
+        """**DEPRECATED** - await [`dialog()`][toga.Window.dialog] with a
+        [`SelectFolderDialog`][toga.SelectFolderDialog]"""
         warnings.warn(
             (
                 "select_folder_dialog(...) has been deprecated; "
@@ -885,7 +942,7 @@ class Window:
     ######################################################################
     @property
     def full_screen(self) -> bool:
-        """**DEPRECATED** – Use :any:`Window.state`."""
+        """**DEPRECATED** – Use [`Window.state`][toga.Window.state]."""
         warnings.warn(
             "`Window.full_screen` is deprecated. Use `Window.state` instead.",
             DeprecationWarning,
@@ -915,20 +972,19 @@ class MainWindow(Window):
     def __init__(self, *args, **kwargs):
         """Create a new Main Window.
 
-        Accepts the same arguments as :class:`~toga.Window`.
+        Accepts the same arguments as [`Window`][toga.Window].
         """
         super().__init__(*args, **kwargs)
 
         # Create a toolbar that is linked to the app.
         self._toolbar = CommandSet(app=self.app)
 
-        # If the window has been created during startup(), we don't want to
-        # install a change listener yet, as the startup process may install
-        # additional commands - we want to wait until startup is complete,
-        # create the initial state of the menus and toolbars, and then add a
-        # change listener. However, if startup *has* completed, we can install a
-        # change listener immediately, and trigger the creation of menus and
-        # toolbars.
+        # If the window has been created during startup(), we don't want to install a
+        # change listener yet, as the startup process may install additional commands -
+        # we want to wait until startup is complete, create the initial state of the
+        # menus and toolbars, and then add a change listener. However, if startup *has*
+        # completed, we can install a change listener immediately, and trigger the
+        # creation of menus and toolbars.
         if self.app.commands.on_change:
             self._toolbar.on_change = self._impl.create_toolbar
 
@@ -947,7 +1003,7 @@ class WindowSet(MutableSet[Window]):
 
         A window is automatically added to the app when it is created, and removed when
         it is closed. Adding a window to an App's window set automatically sets the
-        :attr:`~toga.Window.app` property of the Window.
+        [`Window.app`][toga.Window.app] property of the Window.
         """
         self.app = app
         self.elements: set[Window] = set()

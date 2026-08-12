@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class OnScrollHandler(Protocol):
-    def __call__(self, widget: ScrollContainer, **kwargs: Any) -> object:
+    def __call__(self, widget: ScrollContainer, **kwargs: Any) -> None:
         """A handler to invoke when the container is scrolled.
 
         :param widget: The ScrollContainer that was scrolled.
@@ -39,8 +39,8 @@ class ScrollContainer(Widget):
         :param style: A style object. If no style is provided, a default style
             will be applied to the widget.
         :param horizontal: Should horizontal scrolling be permitted?
-        :param vertical: Should horizontal scrolling be permitted?
-        :param on_scroll: Initial :any:`on_scroll` handler.
+        :param vertical: Should vertical scrolling be permitted?
+        :param on_scroll: Initial [`on_scroll`][toga.ScrollContainer.on_scroll] handler.
         :param content: The content to display in the scroll window.
         :param kwargs: Initial style properties.
         """
@@ -92,7 +92,6 @@ class ScrollContainer(Widget):
 
     def focus(self) -> None:
         """No-op; ScrollContainer cannot accept input focus."""
-        pass
 
     @property
     def content(self) -> Widget | None:
@@ -232,8 +231,7 @@ class ScrollContainer(Widget):
                 horizontal_position = 0
             else:
                 max_value = self.max_horizontal_position
-                if horizontal_position > max_value:
-                    horizontal_position = max_value
+                horizontal_position = min(horizontal_position, max_value)
         else:
             horizontal_position = self.horizontal_position
 
@@ -242,8 +240,7 @@ class ScrollContainer(Widget):
                 vertical_position = 0
             else:
                 max_value = self.max_vertical_position
-                if vertical_position > max_value:
-                    vertical_position = max_value
+                vertical_position = min(vertical_position, max_value)
         else:
             vertical_position = self.vertical_position
 

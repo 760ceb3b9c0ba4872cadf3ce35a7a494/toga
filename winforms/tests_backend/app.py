@@ -1,6 +1,9 @@
+import _overlapped
+import asyncio
 import ctypes
 from pathlib import Path
 from time import sleep
+from unittest.mock import Mock
 
 import PIL.Image
 import pytest
@@ -9,7 +12,9 @@ from System.Drawing import Bitmap, Point
 from System.Windows.Forms import Application, Cursor, ToolStripSeparator
 
 import toga
+from toga_winforms import _use_dotnet_core
 from toga_winforms.keys import toga_to_winforms_key, winforms_to_toga_key
+from toga_winforms.statusicons import CONTEXT_MENU_ATTR, MENU_ATTR
 
 from .dialogs import DialogsMixin
 from .probe import BaseProbe
@@ -19,6 +24,10 @@ class AppProbe(BaseProbe, DialogsMixin):
     supports_key = True
     supports_key_mod3 = False
     supports_current_window_assignment = True
+    supports_dark_mode = True
+    edit_menu_noop_enabled = False
+    supports_psutil = True
+    beep_delay = 0.1
 
     def __init__(self, app):
         super().__init__()
@@ -26,6 +35,60 @@ class AppProbe(BaseProbe, DialogsMixin):
         self.main_window = app.main_window
         # The Winforms Application class is a singleton instance
         assert self.app._impl.native == Application
+
+    async def assert_event_loop_unregistering(self, loop):
+        """Test that events can be unregistered."""
+        event = _overlapped.CreateEvent(None, True, False, None)
+        fut = loop._proactor.wait_for_handle(event, 10)
+        fut.cancel()
+
+        # Wait for the future to be removed from the unregistered list.
+        await asyncio.sleep(0.2)
+        assert len(loop._proactor._unregistered) == 0
+
+    async def assert_event_loop_scheduling(self, loop):
+        """Test that the event loop doesn't rescheduled wake-ups for the same event."""
+
+        # Define a version of run_once_recurring that records the number of calls.
+        mock = Mock()
+        run_once_recurring = loop.run_once_recurring
+
+        def run_once_recurring_mock(wake_time=None, mock=mock):
+            mock()
+            run_once_recurring()
+
+        # Create a task so that len(loop._scheduled) == 1.
+        async def wait_function():
+            await asyncio.sleep(0.5)
+
+        asyncio.create_task(wait_function())
+
+        # A small sleep to ensure that the above task is scheduled.
+        await asyncio.sleep(0.01)
+
+        # Artificially run the event loop when len(loop._scheduled) == 1. These calls
+        # shouldn't rescheduled wake-ups for the above task.
+        for _ in range(100):
+            loop.run_once_recurring()
+
+        # Monkeypatch run_once_recurring to count the number of calls.
+        loop.run_once_recurring = run_once_recurring_mock
+
+        # Wait until *after* the above task is finished.
+        await asyncio.sleep(0.6)
+
+        # It's hard to estimate the call count, so use a generous buffer value.
+        assert mock.call_count < 20
+
+        # Restore the original run_once_recurring.
+        loop.run_once_recurring = run_once_recurring
+
+    async def assert_event_loop(self):
+        loop = self.app.loop
+
+        await self.assert_event_loop_unregistering(loop)
+
+        await self.assert_event_loop_scheduling(loop)
 
     @property
     def config_path(self):
@@ -81,10 +144,16 @@ class AppProbe(BaseProbe, DialogsMixin):
         if not GetCursorInfo(ctypes.byref(info)):
             raise RuntimeError("GetCursorInfo failed")
 
-        # `flags` is 0 or 1 in local testing, but the GitHub Actions runner always
-        # returns 2 ("the system is not drawing the cursor because the user is providing
-        # input through touch or pen instead of the mouse"). hCursor is more reliable.
-        return info.hCursor is not None
+        # Visibility *should* be exposed by CursorInfo.flags; but in CI,
+        # CursorInfo.flags returns 2 ("the system is not drawing the cursor
+        # because the user is providing input through touch or pen instead of
+        # the mouse"). In that case, we have to fall back to the backend's
+        # boolean representation, because there doesn't appear to be any
+        # more reliable mechanism for determining cursor state.
+        if info.flags == 2:
+            return self.app._impl._cursor_visible
+        else:
+            return info.flags == 1
 
     def unhide(self):
         pytest.xfail("This platform doesn't have an app level unhide.")
@@ -174,7 +243,7 @@ class AppProbe(BaseProbe, DialogsMixin):
         menu = self._menu_item(path)
 
         assert len(menu.DropDownItems) == len(expected)
-        for item, title in zip(menu.DropDownItems, expected):
+        for item, title in zip(menu.DropDownItems, expected, strict=False):
             if title == "---":
                 assert isinstance(item, ToolStripSeparator)
             else:
@@ -219,14 +288,16 @@ class AppProbe(BaseProbe, DialogsMixin):
         return status_icon._impl.native is not None
 
     def status_menu_items(self, status_icon):
-        if status_icon._impl.native.ContextMenu:
+        context_menu_strip = getattr(status_icon._impl.native, CONTEXT_MENU_ATTR)
+        if context_menu_strip:
             return [
                 {
-                    "-": "---",
+                    # .NET Core returns "" for separator text
+                    "" if _use_dotnet_core else "-": "---",
                     "About Toga Testbed": "**ABOUT**",
                     "Exit": "**EXIT**",
                 }.get(str(item.Text), str(item.Text))
-                for item in status_icon._impl.native.ContextMenu.MenuItems
+                for item in getattr(context_menu_strip, MENU_ATTR)
             ]
         else:
             # It's a button status item
@@ -241,6 +312,6 @@ class AppProbe(BaseProbe, DialogsMixin):
         )
 
     def activate_status_menu_item(self, item_id, title):
-        menu = self.app.status_icons[item_id]._impl.native.ContextMenu
-        item = {item.Text: item for item in menu.MenuItems}[title]
+        menu = getattr(self.app.status_icons[item_id]._impl.native, CONTEXT_MENU_ATTR)
+        item = {item.Text: item for item in getattr(menu, MENU_ATTR)}[title]
         item.OnClick(EventArgs.Empty)

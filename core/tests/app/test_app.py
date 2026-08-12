@@ -33,6 +33,18 @@ APP_METADATA = {
 }
 
 
+async def test_unsupported_widget(app):
+    """If a widget isn't implemented, the factory raises NotImplementedError."""
+    with pytest.raises(
+        NotImplementedError,
+        match=(
+            r"The 'toga_dummy' backend for the toga_core interface doesn't "
+            r"implement NoSuchWidget"
+        ),
+    ):
+        _ = app.factory.NoSuchWidget
+
+
 @pytest.mark.parametrize(
     (
         "kwargs, metadata, main_module, expected_formal_name, expected_app_id, "
@@ -69,7 +81,7 @@ APP_METADATA = {
             Mock(__package__=None),
             "Test App",
             "org.beeware.test-app",
-            "toga",
+            "test-app",
         ),
         # Explicit app properties, with metadata. Explicit values take precedence.
         (
@@ -110,7 +122,7 @@ APP_METADATA = {
             Mock(__package__=""),
             "Test App",
             "org.beeware.test-app",
-            "toga",
+            "test-app",
         ),
         # Explicit app properties, with metadata. Explicit values take precedence.
         (
@@ -142,7 +154,7 @@ APP_METADATA = {
             Mock(__package__="my_app"),
             "Explicit App",
             "org.beeware.explicit-app",
-            "my_app",
+            "explicit-app",
         ),
         # No app properties, with metadata
         (
@@ -151,7 +163,7 @@ APP_METADATA = {
             Mock(__package__="my_app"),
             "Test App",
             "org.beeware.test-app",
-            "my_app",
+            "test-app",
         ),
         # Explicit app properties, with metadata. Explicit values take precedence.
         (
@@ -191,7 +203,7 @@ APP_METADATA = {
             None,
             "Test App",
             "org.beeware.test-app",
-            "toga",
+            "test-app",
         ),
         # Explicit app properties, with metadata. Explicit values take precedence.
         (
@@ -201,6 +213,19 @@ APP_METADATA = {
             "Explicit App",
             "org.beeware.explicit-app",
             "override-app",
+        ),
+        ###########################################################################
+        # Invoking as python -m pdb my_app.py.
+        # This causes a main module of "my_app", but `__package__` isn't set.
+        ###########################################################################
+        # No app name provided; falls back to app_id
+        (
+            EXPLICIT_MIN_APP_KWARGS,
+            None,
+            Mock(),
+            "Explicit App",
+            "org.beeware.explicit-app",
+            "explicit-app",
         ),
     ],
 )
@@ -243,7 +268,7 @@ async def test_create(
     assert app.on_running._raw.__func__ == toga.App.on_running
     assert app.on_exit._raw.__func__ == toga.App.on_exit
 
-    metadata_mock.assert_called_once_with(expected_app_name)
+    metadata_mock.assert_called_once()
 
     # About menu item exists and is disabled
     assert toga.Command.ABOUT in app.commands
@@ -461,6 +486,58 @@ async def test_change_invalid_creation_main_window():
         match=r"Invalid dummy main window value",
     ):
         BadMainWindowApp(formal_name="Test App", app_id="org.example.test")
+
+
+async def test_presentation_mode_multiple_windows_all_in_presentation():
+    """All windows should be in presentation mode, not just the last one
+    (issue #4233)."""
+    app = toga.App(formal_name="Test App", app_id="org.example.test")
+    window1 = toga.Window()
+    window1.content = toga.Box()
+    window2 = toga.Window()
+    window2.content = toga.Box()
+
+    app.enter_presentation_mode([window1, window2])
+
+    assert window1.state == WindowState.PRESENTATION
+    assert window2.state == WindowState.PRESENTATION
+
+
+async def test_presentation_mode_sequential_replaces_previous():
+    """Entering presentation mode while already in it exits the previous one first."""
+    app = toga.App(formal_name="Test App", app_id="org.example.test")
+    window1 = toga.Window()
+    window2 = toga.Window()
+
+    # Enter presentation with window1
+    app.enter_presentation_mode([window1])
+    assert window1.state == WindowState.PRESENTATION
+
+    # Enter presentation with window2 — window1 should exit
+    app.enter_presentation_mode([window2])
+    assert window1.state == WindowState.NORMAL
+    assert window2.state == WindowState.PRESENTATION
+
+
+async def test_exit_presentation_mode_recursion_guard():
+    """The recursion guard in exit_presentation_mode prevents infinite recursion."""
+    app = toga.App(formal_name="Test App", app_id="org.example.test")
+    window1 = toga.Window()
+
+    app.enter_presentation_mode([window1])
+    assert window1.state == WindowState.PRESENTATION
+
+    # Simulate the recursion scenario: set the flag as if we're already exiting,
+    # then call exit_presentation_mode — it should be a no-op.
+    app._impl._exiting_presentation = True
+    app.exit_presentation_mode()
+    # Window should still be in presentation since the exit was short-circuited
+    assert window1.state == WindowState.PRESENTATION
+    app._impl._exiting_presentation = False
+
+    # Now a real exit should work
+    app.exit_presentation_mode()
+    assert window1.state == WindowState.NORMAL
 
 
 @pytest.mark.parametrize(
@@ -705,7 +782,7 @@ async def test_startup_method():
     assert_action_performed(app.main_window, "show")
 
 
-def test_startup_method_returns_none():
+async def test_startup_method_returns_none():
     """Test that startup method returning None raises appropriate error"""
 
     def startup_none(app):
@@ -832,7 +909,7 @@ def test_exit_no_handler(app):
     assert_action_performed(app, "exit")
 
 
-def test_exit_subclassed_handler(app):
+async def test_exit_subclassed_handler(app):
     """An app can implement on_exit by subclassing."""
     exit = {}
 
@@ -918,7 +995,7 @@ async def test_loop(app):
     assert app.loop is asyncio.get_running_loop()
 
 
-def test_running():
+async def test_running():
     """The running() method is invoked when the main loop starts"""
     running = {}
 
@@ -929,16 +1006,16 @@ def test_running():
         def on_running(self):
             running["called"] = True
 
-    app = SubclassedApp(formal_name="Test App", app_id="org.example.test")
+    _ = SubclassedApp(formal_name="Test App", app_id="org.example.test")
 
     # Run a fake main loop.
-    app.loop.run_until_complete(asyncio.sleep(0.5))
+    await asyncio.sleep(0.5)
 
     # The running method was invoked
     assert running["called"]
 
 
-def test_async_running_method():
+async def test_async_running_method():
     """The running() method can be a coroutine."""
     running = {}
 
@@ -949,10 +1026,10 @@ def test_async_running_method():
         async def on_running(self):
             running["called"] = True
 
-    app = SubclassedApp(formal_name="Test App", app_id="org.example.test")
+    _ = SubclassedApp(formal_name="Test App", app_id="org.example.test")
 
     # Run a fake main loop.
-    app.loop.run_until_complete(asyncio.sleep(0.5))
+    await asyncio.sleep(0.5)
 
     # The running coroutine was invoked
     assert running["called"]

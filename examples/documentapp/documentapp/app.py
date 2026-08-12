@@ -16,16 +16,16 @@ class ExampleDocument(toga.Document):
     def read(self):
         # Read the content of the file represented by the document, and populate the
         # widgets in the main window with that content.
-        with self.path.open() as f:
+        with self.path.open(encoding="utf-8") as f:
             self.main_window.content.value = f.read()
 
     def write(self):
         # Save the content currently displayed by the main window.
-        with self.path.open("w") as f:
+        with self.path.open("w", encoding="utf-8") as f:
             f.write(self.main_window.content.value)
 
 
-class ExampleDocumentApp(toga.App):
+class DocumentApp(toga.App):
     def startup(self):
         # A document-based app does not have a single main window. A window (or windows)
         # will be created from the document(s) specified at the command line; or if no
@@ -35,7 +35,7 @@ class ExampleDocumentApp(toga.App):
 
 
 def main():
-    return ExampleDocumentApp(
+    return DocumentApp(
         "Document App",
         "org.beeware.toga.examples.documentapp",
         document_types=[ExampleDocument],
@@ -43,5 +43,4 @@ def main():
 
 
 if __name__ == "__main__":
-    app = main()
-    app.main_loop()
+    main().main_loop()

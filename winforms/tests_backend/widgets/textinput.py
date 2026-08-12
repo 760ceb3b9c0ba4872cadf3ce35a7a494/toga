@@ -1,8 +1,7 @@
 import ctypes
 from ctypes import c_uint
-from ctypes.wintypes import HWND, LPARAM
+from ctypes.wintypes import HWND
 
-import pytest
 from System.Windows.Forms import TextBox
 
 from .base import SimpleProbe
@@ -12,6 +11,7 @@ from .properties import toga_x_text_align
 class TextInputProbe(SimpleProbe):
     native_class = TextBox
     fixed_height = 23
+    redo_available = True
 
     @property
     def value(self):
@@ -24,11 +24,12 @@ class TextInputProbe(SimpleProbe):
     @property
     def _placeholder(self):
         buffer = ctypes.create_unicode_buffer(1024)
+        buffer_address = ctypes.cast(buffer, ctypes.c_void_p).value
         result = ctypes.windll.user32.SendMessageW(
             HWND(self.native.Handle.ToInt32()),
             c_uint(0x1502),  # EM_GETCUEBANNER
-            buffer,
-            LPARAM(ctypes.sizeof(buffer)),
+            buffer_address,
+            ctypes.sizeof(buffer),
         )
         if not result:
             raise RuntimeError("EM_GETCUEBANNER failed")
@@ -55,4 +56,5 @@ class TextInputProbe(SimpleProbe):
         pass
 
     def set_cursor_at_end(self):
-        pytest.skip("Cursor positioning not supported on this platform")
+        self.native.SelectionStart = len(self.native.Text)
+        self.native.SelectionLength = 0

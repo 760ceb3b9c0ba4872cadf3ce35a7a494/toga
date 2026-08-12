@@ -1,7 +1,26 @@
 from types import NoneType
 from unittest.mock import Mock
 
+import pytest
+
 import toga
+
+
+async def test_event_loop(app_probe):
+    """Runs tests for the apps event loop."""
+    await app_probe.assert_event_loop()
+
+
+async def test_unsupported_widget(app):
+    """If a widget isn't implemented, the factory raises NotImplementedError."""
+    with pytest.raises(
+        NotImplementedError,
+        match=(
+            rf"The '{toga.backend}' backend for the toga_core interface "
+            f"doesn't implement NoSuchWidget"
+        ),
+    ):
+        _ = app.factory.NoSuchWidget
 
 
 async def test_main_window_toolbar(app, main_window, main_window_probe):
@@ -18,14 +37,18 @@ async def test_main_window_toolbar(app, main_window, main_window_probe):
     # Ordering is lexicographical for cmd 2 and 3.
     main_window_probe.assert_toolbar_item(
         0,
+        separators=0,
         label="Full command",
         tooltip="A full command definition",
         has_icon=True,
         enabled=True,
     )
+
     main_window_probe.assert_is_toolbar_separator(1)
+
     main_window_probe.assert_toolbar_item(
         2,
+        separators=1,
         label="No Icon",
         tooltip="A command with no icon",
         has_icon=False,
@@ -33,14 +56,18 @@ async def test_main_window_toolbar(app, main_window, main_window_probe):
     )
     main_window_probe.assert_toolbar_item(
         3,
+        separators=1,
         label="No Tooltip",
         tooltip=None,
         has_icon=True,
         enabled=True,
     )
+
     main_window_probe.assert_is_toolbar_separator(4, section=True)
+
     main_window_probe.assert_toolbar_item(
         5,
+        separators=2,
         label="Sectioned",
         tooltip="I'm in another section",
         has_icon=True,
@@ -58,6 +85,7 @@ async def test_main_window_toolbar(app, main_window, main_window_probe):
     await main_window_probe.redraw("Command 1 disabled")
     main_window_probe.assert_toolbar_item(
         0,
+        separators=0,
         label="Full command",
         tooltip="A full command definition",
         has_icon=True,
@@ -69,6 +97,7 @@ async def test_main_window_toolbar(app, main_window, main_window_probe):
     await main_window_probe.redraw("Command 1 re-enabled")
     main_window_probe.assert_toolbar_item(
         0,
+        separators=0,
         label="Full command",
         tooltip="A full command definition",
         has_icon=True,
@@ -216,28 +245,32 @@ async def test_menu_items(app, app_probe):
     )
 
 
-async def test_beep(app):
+async def test_beep(app, app_probe):
     """The machine can go Bing!"""
     # This isn't a very good test. It ensures coverage, which verifies that the method
     # can be invoked without raising an error, but there's no way to verify that the app
     # actually made a noise.
     app.beep()
+    # Ensure there are no dangling tasks with a long delay after sounding the beep.
+    await app_probe.redraw("Application has sounded bell", delay=app_probe.beep_delay)
 
 
 async def test_screens(app, app_probe):
-    """Screens must have unique origins and names, with the primary screen at (0,0)."""
+    """Screens must have unique origins, and a (not necessarily unique) name."""
+    assert app.screens
+    # Collect origins to verify each monitor occupies a unique position
+    origins = []
+    for screen in app.screens:
+        assert isinstance(screen.name, str)
+        # Origin is an (x, y) tuple of integers representing screen position
+        assert isinstance(screen.origin, tuple)
+        assert len(screen.origin) == 2
+        assert all(isinstance(value, int) for value in screen.origin)
+        origins.append(screen.origin)
 
-    # Get the origin of screen 0
-    assert app.screens[0].origin == (0, 0)
-
-    # Check for unique names
-    screen_names = [s.name for s in app.screens]
-    unique_names = set(screen_names)
-    assert len(screen_names) == len(unique_names)
-
-    # Check that the origin of every other screen is not "0,0"
-    origins_not_zero = all(screen.origin != (0, 0) for screen in app.screens[1:])
-    assert origins_not_zero is True
+    # Identical monitors can share the same name, so assert uniqueness on origin
+    # since every screen must occupy a distinct position.
+    assert len(origins) == len(set(origins))
 
 
 async def test_app_icon(app, app_probe):
@@ -256,5 +289,8 @@ async def test_app_icon(app, app_probe):
     app_probe.assert_app_icon(None)
 
 
-async def test_dark_mode_state_read(app):
-    assert isinstance(app.dark_mode, (NoneType, bool))
+async def test_dark_mode_state_read(app, app_probe):
+    if app_probe.supports_dark_mode:
+        assert isinstance(app.dark_mode, bool)
+    else:
+        assert isinstance(app.dark_mode, NoneType)

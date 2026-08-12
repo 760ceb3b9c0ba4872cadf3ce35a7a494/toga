@@ -5,6 +5,8 @@ import pytest
 import toga
 from testbed.app import ExampleDoc
 
+from ..conftest import skip_on_backends
+
 ####################################################################################
 # Document API tests
 ####################################################################################
@@ -12,6 +14,11 @@ if toga.platform.current_platform not in {"macOS", "windows", "linux"}:
     pytest.skip(
         "Document API is specific to desktop platforms", allow_module_level=True
     )
+skip_on_backends(
+    "toga_textual",
+    reason="Document apps are not implemented on Textual.",
+    allow_module_level=True,
+)
 
 
 async def test_new_document(app, app_probe):
@@ -35,7 +42,7 @@ async def test_open_document(app, app_probe):
     document_path = Path(__file__).parent / "docs/example.testbed"
     app.documents.open(document_path)
 
-    await app_probe.redraw("Document has been opened", delay=0.1)
+    await app_probe.redraw("Document has been opened", delay=0.2)
 
     assert len(app.documents) == 1
     assert len(app.windows) == 2
@@ -109,7 +116,7 @@ async def test_save_document(app, app_probe):
     document_path = Path(__file__).parent / "docs/example.testbed"
     app.documents.open(document_path)
 
-    await app_probe.redraw("Document has been opened", delay=0.1)
+    await app_probe.redraw("Document has been opened", delay=0.2)
 
     assert len(app.documents) == 1
     assert len(app.windows) == 2
@@ -138,7 +145,7 @@ async def test_save_as_document(monkeypatch, app, app_probe, tmp_path):
 
     monkeypatch.setattr(document.main_window, "dialog", mock_save_as_dialog)
 
-    await app_probe.redraw("Document has been opened", delay=0.1)
+    await app_probe.redraw("Document has been opened", delay=0.2)
 
     assert len(app.documents) == 1
     assert len(app.windows) == 2
@@ -162,7 +169,7 @@ async def test_save_all_documents(app, app_probe):
     document_path = Path(__file__).parent / "docs/example.testbed"
     app.documents.open(document_path)
 
-    await app_probe.redraw("Document has been opened", delay=0.1)
+    await app_probe.redraw("Document has been opened", delay=0.2)
 
     assert len(app.documents) == 1
     assert len(app.windows) == 2

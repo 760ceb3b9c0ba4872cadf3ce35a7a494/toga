@@ -5,7 +5,7 @@ from pytest import fixture
 
 import toga
 
-from ..conftest import skip_on_platforms
+from ..conftest import skip_on_backends
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
     test_background_color,
@@ -15,6 +15,12 @@ from .properties import (  # noqa: F401
     test_color_reset,
     test_enabled,
     test_flex_horizontal_widget_size,
+)
+
+skip_on_backends(
+    "toga_textual",
+    reason="DateInput is not implemented on Textual.",
+    allow_module_level=True,
 )
 
 # When setting `value` to None, how close the resulting value must be to the current
@@ -46,6 +52,7 @@ def values():
         date(1960, 12, 31),
         date(2020, 2, 29),  # Leap day
         date(2100, 1, 1),
+        date(3742, 1, 1),
         date(8999, 12, 31),
     ]
 
@@ -56,12 +63,13 @@ def normalize():
     returned by the widget."""
 
     def normalize_date(value):
-        if isinstance(value, datetime):
-            return value.date()
-        elif isinstance(value, date):
-            return value
-        else:
-            raise TypeError(value)
+        match value:
+            case datetime():
+                return value.date()
+            case date():
+                return value
+            case _:
+                raise TypeError(value)
 
     return normalize_date
 
@@ -79,20 +87,14 @@ def assert_none_value(normalize):
 
 @fixture
 async def widget():
-    skip_on_platforms("linux")
     return toga.DateInput()
 
 
-test_cleanup = build_cleanup_test(
-    toga.DateInput,
-    skip_platforms=("linux",),
-    xfail_platforms=("android",),
-)
+test_cleanup = build_cleanup_test(toga.DateInput)
 
 
 async def test_init():
     "Properties can be set in the constructor"
-    skip_on_platforms("linux")
 
     value = date(1999, 12, 31)
     min = date(1999, 12, 30)

@@ -42,14 +42,6 @@ class PythonAppDelegate(UIResponder):
     def applicationWillTerminate_(self, application) -> None:
         print("App about to Terminate.")
 
-    @objc_method
-    def application_didChangeStatusBarOrientation_(
-        self, application, oldStatusBarOrientation: int
-    ) -> None:
-        """This callback is invoked when rotating the device from landscape to portrait
-        and vice versa."""
-        App.app.interface.main_window.content.refresh()
-
 
 class App:
     # iOS apps exit when the last window is closed
@@ -61,11 +53,14 @@ class App:
     def __init__(self, interface):
         self.interface = interface
         self.interface._impl = self
+
         # Native instance doesn't exist until the lifecycle completes.
         self.native = None
 
         # Add a reference for the PythonAppDelegate class to use.
         App.app = self
+
+        self._exiting_presentation = False
 
         self.loop = RubiconEventLoop()
 
@@ -119,8 +114,11 @@ class App:
     ######################################################################
 
     def get_dark_mode_state(self):
-        self.interface.factory.not_implemented("dark mode state")
-        return None
+        # UIUserInterfaceStyle is an enum with the following values:
+        # 0: Unspecified
+        # 1: Light
+        # 2: Dark
+        return UIScreen.mainScreen.traitCollection.userInterfaceStyle == 2
 
     ######################################################################
     # App capabilities
@@ -133,7 +131,6 @@ class App:
 
     def open_document(self, fileURL):  # pragma: no cover
         """Add a new document to this app."""
-        pass
 
     def show_about_dialog(self):
         self.interface.factory.not_implemented("App.show_about_dialog()")

@@ -4,16 +4,15 @@ import sys
 import threading
 
 import System.Windows.Forms as WinForms
-from Microsoft.Win32 import SystemEvents
 from System import Threading
 from System.Media import SystemSounds
 from System.Net import SecurityProtocolType, ServicePointManager
 from System.Windows.Threading import Dispatcher
 
 from toga.dialogs import InfoDialog
+from toga.handlers import WeakrefCallable
 
 from .libs.proactor import WinformsProactorEventLoop
-from .libs.wrapper import WeakrefCallable
 from .screens import Screen as ScreenImpl
 
 
@@ -64,6 +63,7 @@ class App:
         # Track whether the app is exiting. This is used to stop the event loop,
         # and shortcut close handling on any open windows when the app exits.
         self._is_exiting = False
+        self._exiting_presentation = False
 
         # Winforms cursor visibility is a stack; If you call hide N times, you
         # need to call Show N times to make the cursor re-appear. Store a local
@@ -77,18 +77,6 @@ class App:
         self.native = WinForms.Application
         self.app_context = WinForms.ApplicationContext()
         self.app_dispatcher = Dispatcher.CurrentDispatcher
-
-        # We would prefer to detect DPI changes directly, using the DpiChanged,
-        # DpiChangedBeforeParent or DpiChangedAfterParent events on the window. But none
-        # of these events ever fire, possibly because we're missing some app metadata
-        # (https://github.com/beeware/toga/pull/2155#issuecomment-2460374101). So
-        # instead we need to listen to all events which could cause a DPI change:
-        #   * DisplaySettingsChanged
-        #   * Form.LocationChanged and Form.Resize, since a window's DPI is determined
-        #     by which screen most of its area is on.
-        SystemEvents.DisplaySettingsChanged += WeakrefCallable(
-            self.winforms_DisplaySettingsChanged
-        )
 
         # Ensure that TLS1.2 and TLS1.3 are enabled for HTTPS connections.
         # For some reason, some Windows installs have these protocols
@@ -114,19 +102,6 @@ class App:
         self.loop.call_soon_threadsafe(self.interface._startup)
 
     ######################################################################
-    # Native event handlers
-    ######################################################################
-
-    def winforms_DisplaySettingsChanged(self, sender, event):
-        # This event is NOT called on the UI thread, so it's not safe for it to access
-        # the UI directly.
-        self.interface.loop.call_soon_threadsafe(self.update_dpi)
-
-    def update_dpi(self):
-        for window in self.interface.windows:
-            window._impl.update_dpi()
-
-    ######################################################################
     # Commands and menus
     ######################################################################
 
@@ -149,7 +124,7 @@ class App:
 
     def exit(self):  # pragma: no cover
         self._is_exiting = True
-        self.native.Exit()
+        # app.native.Exit() is called in the proactor event loop.
 
     def _run_app(self):  # pragma: no cover
         # Enable coverage tracing on this non-Python-created thread
@@ -215,8 +190,17 @@ class App:
     ######################################################################
 
     def get_dark_mode_state(self):
-        self.interface.factory.not_implemented("dark mode state")
-        return None
+        from Microsoft.Win32 import Registry
+
+        key = Registry.CurrentUser.OpenSubKey(
+            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+        )
+        if key is None:  # pragma: no cover
+            return False
+        try:
+            return key.GetValue("AppsUseLightTheme", 1) == 0
+        finally:
+            key.Close()
 
     ######################################################################
     # App capabilities

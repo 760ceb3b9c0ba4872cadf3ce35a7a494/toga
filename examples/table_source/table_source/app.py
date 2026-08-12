@@ -3,7 +3,6 @@ from random import choice
 import toga
 from toga.constants import COLUMN, ROW
 from toga.sources import Source
-from toga.style import Pack
 
 bee_movies = [
     ("The Secret Life of Bees", "2008", "7.3", "Drama"),
@@ -84,7 +83,7 @@ class GoodMovieSource(Source):
 
     # A listener that passes on all notifications, but only if they apply
     # to the filtered data source
-    def insert(self, index, item):
+    def source_insert(self, *, index, item):
         # If the item exists in the filtered list, propagate the notification
         for i, filtered_item in enumerate(self._filtered()):
             if filtered_item == item:
@@ -92,7 +91,7 @@ class GoodMovieSource(Source):
                 # *filtered* list.
                 self.notify("insert", index=i, item=item)
 
-    def pre_remove(self, index, item):
+    def source_pre_remove(self, index, item):
         # If the item exists in the filtered list, track that it is being
         # removed; but don't propagate the removal notification until it has
         # been removed from the base data source
@@ -101,7 +100,7 @@ class GoodMovieSource(Source):
                 # Track that the object *was* in the data source
                 self._removals[item] = i
 
-    def remove(self, index, item):
+    def source_remove(self, *, index, item):
         # If the removed item previously existed in the filtered data source,
         # propagate the removal notification.
         try:
@@ -111,14 +110,17 @@ class GoodMovieSource(Source):
             # object wasn't previously in the data source
             pass
 
-    def clear(self):
+    def source_clear(self):
         self.notify("clear")
 
 
-class ExampleTableSourceApp(toga.App):
+class TableSourceApp(toga.App):
     # Table callback functions
     def on_select_handler(self, widget, **kwargs):
-        row = widget.selection
+        if isinstance(widget, toga.Table):
+            row = widget.selection
+        else:
+            row = widget.value
         self.label.text = (
             f"You selected row: {row.title}" if row is not None else "No row selected"
         )
@@ -148,47 +150,49 @@ class ExampleTableSourceApp(toga.App):
         # of the second reads from the first.
         # The headings are also in a different order.
         self.table1 = toga.Table(
-            headings=["Year", "Title", "Rating", "Genre"],
+            columns=["Year", "Title", "Rating", "Genre"],
             data=MovieSource(),
-            style=Pack(flex=1),
+            flex=1,
             on_select=self.on_select_handler,
         )
 
         self.table2 = toga.Table(
-            headings=["Rating", "Title", "Year", "Genre"],
+            columns=["Rating", "Title", "Year", "Genre"],
             data=GoodMovieSource(self.table1.data),
-            style=Pack(flex=1),
+            flex=1,
         )
 
         # Populate the table
         for entry in bee_movies:
             self.table1.data.add(entry)
 
-        tablebox = toga.Box(children=[self.table1, self.table2], style=Pack(flex=1))
+        tablebox = toga.Box(children=[self.table1, self.table2], flex=1)
+
+        # Create a Selection that is also using the data source
+        self.selection = toga.Selection(
+            items=self.table2.data,
+            accessor="title",
+            on_change=self.on_select_handler,
+            flex=1,
+        )
+        selection_label = toga.Label("Choose a movie:", flex=0.5)
+        selection_box = toga.Box(
+            children=[selection_label, self.selection],
+            direction=ROW,
+        )
 
         # Buttons
-        btn_style = Pack(flex=1)
-        btn_insert = toga.Button(
-            "Insert Row", on_press=self.insert_handler, style=btn_style
-        )
-        btn_delete = toga.Button(
-            "Delete Row", on_press=self.delete_handler, style=btn_style
-        )
-        btn_clear = toga.Button(
-            "Clear Table", on_press=self.clear_handler, style=btn_style
-        )
-        btn_box = toga.Box(
-            children=[btn_insert, btn_delete, btn_clear], style=Pack(direction=ROW)
-        )
+        btn_insert = toga.Button("Insert Row", on_press=self.insert_handler, flex=1)
+        btn_delete = toga.Button("Delete Row", on_press=self.delete_handler, flex=1)
+        btn_clear = toga.Button("Clear Table", on_press=self.clear_handler, flex=1)
+        btn_box = toga.Box(children=[btn_insert, btn_delete, btn_clear], direction=ROW)
 
         # Most outer box
         outer_box = toga.Box(
-            children=[btn_box, tablebox, self.label],
-            style=Pack(
-                flex=1,
-                direction=COLUMN,
-                margin=10,
-            ),
+            children=[btn_box, tablebox, selection_box, self.label],
+            flex=1,
+            direction=COLUMN,
+            margin=10,
         )
 
         # Add the content on the main window
@@ -199,11 +203,8 @@ class ExampleTableSourceApp(toga.App):
 
 
 def main():
-    return ExampleTableSourceApp(
-        "Table Source", "org.beeware.toga.examples.table_source"
-    )
+    return TableSourceApp("Table Source", "org.beeware.toga.examples.table_source")
 
 
 if __name__ == "__main__":
-    app = main()
-    app.main_loop()
+    main().main_loop()

@@ -1,9 +1,16 @@
 import asyncio
+import gc
 from unittest.mock import Mock
 
 import pytest
 
-from toga.handlers import AsyncResult, NativeHandler, simple_handler, wrapped_handler
+from toga.handlers import (
+    AsyncResult,
+    NativeHandler,
+    WeakrefCallable,
+    simple_handler,
+    wrapped_handler,
+)
 
 
 class ExampleAsyncResult(AsyncResult):
@@ -93,7 +100,7 @@ def test_function_handler_error(capsys):
     def handler(*args, **kwargs):
         handler_call["args"] = args
         handler_call["kwargs"] = kwargs
-        raise Exception("Problem in handler")
+        raise RuntimeError("Problem in handler")
 
     wrapped = wrapped_handler(obj, handler)
 
@@ -141,7 +148,7 @@ def test_function_handler_with_cleanup():
     }
 
     # Cleanup method was invoked
-    cleanup.assert_called_once_with(obj, 42)
+    cleanup.assert_called_once_with(obj, 42, "arg1", "arg2", kwarg1=3, kwarg2=4)
 
 
 def test_function_handler_with_cleanup_error(capsys):
@@ -170,7 +177,7 @@ def test_function_handler_with_cleanup_error(capsys):
     }
 
     # Cleanup method was invoked
-    cleanup.assert_called_once_with(obj, 42)
+    cleanup.assert_called_once_with(obj, 42, "arg1", "arg2", kwarg1=3, kwarg2=4)
 
     # Evidence of the handler cleanup error is in the log.
     assert (
@@ -228,7 +235,7 @@ async def test_generator_handler_error(capsys):
         handler_call["args"] = args
         handler_call["kwargs"] = kwargs
         yield 0.01  # A short sleep
-        raise Exception("Problem in handler")
+        raise RuntimeError("Problem in handler")
 
     wrapped = wrapped_handler(obj, handler)
 
@@ -380,7 +387,7 @@ async def test_coroutine_handler_error(capsys):
         handler_call["args"] = args
         handler_call["kwargs"] = kwargs
         await asyncio.sleep(0.01)  # A short sleep
-        raise Exception("Problem in handler")
+        raise RuntimeError("Problem in handler")
 
     wrapped = wrapped_handler(obj, handler)
 
@@ -432,7 +439,7 @@ async def test_coroutine_handler_with_cleanup():
     }
 
     # Cleanup method was invoked
-    cleanup.assert_called_once_with(obj, 42)
+    cleanup.assert_called_once_with(obj, 42, "arg1", "arg2", kwarg1=3, kwarg2=4)
 
 
 async def test_coroutine_handler_with_cleanup_error(capsys):
@@ -464,7 +471,7 @@ async def test_coroutine_handler_with_cleanup_error(capsys):
     }
 
     # Cleanup method was invoked
-    cleanup.assert_called_once_with(obj, 42)
+    cleanup.assert_called_once_with(obj, 42, "arg1", "arg2", kwarg1=3, kwarg2=4)
 
     # Evidence of the handler cleanup error is in the log.
     assert (
@@ -530,6 +537,14 @@ async def test_async_result_non_comparable():
         match=r"Can't check Test result directly; use await or an on_result handler",
     ):
         _ = result != 42
+
+    # Truthiness must raise the same helpful error (regression:
+    # __bool__ carried an extra parameter, so bool() raised TypeError).
+    with pytest.raises(
+        RuntimeError,
+        match=r"Can't check Test result directly; use await or an on_result handler",
+    ):
+        _ = bool(result)
 
 
 async def test_async_result():
@@ -721,3 +736,129 @@ async def test_async_exception_cancelled_sync():
 
     # The callback wasn't called
     on_result.assert_not_called()
+
+
+def test_weakref_function_call():
+    """WeakrefCallable correctly calls the wrapped function."""
+
+    def test_func(x, y=2):
+        return x + y
+
+    wrc = WeakrefCallable(test_func)
+
+    # Test with positional arguments
+    assert wrc(3) == 5
+
+    # Test with keyword arguments
+    assert wrc(3, y=3) == 6
+
+    # Test with mixed arguments
+    assert wrc(3, 4) == 7
+
+
+def test_weakref_method_call():
+    """WeakrefCallable correctly calls a method."""
+
+    class TestClass:
+        def __init__(self, value):
+            self.value = value
+
+        def method(self, x, y=2):
+            return self.value + x + y
+
+    obj = TestClass(5)
+    wrc = WeakrefCallable(obj.method)
+
+    # Test method call
+    assert wrc(3) == 10
+
+    # Test with keyword arguments
+    assert wrc(3, y=3) == 11
+
+    # Test with mixed arguments
+    assert wrc(3, 4) == 12
+
+
+def test_weakref_lambda_call():
+    """WeakrefCallable works with lambda functions."""
+    # Store the lambda in a variable to prevent it from being garbage collected
+    lambda_func = lambda x: x * 2  # noqa: E731
+    wrc = WeakrefCallable(lambda_func)
+    assert wrc(5) == 10
+
+
+def test_weakref_gc_function():
+    """A function is garbage collected properly."""
+
+    def create_function_wrapper():
+        def temp_func(x):
+            return x * 3
+
+        return WeakrefCallable(temp_func)
+
+    wrc = create_function_wrapper()
+
+    # Force garbage collection
+    gc.collect()
+
+    # The function should be gone
+    assert wrc.ref() is None
+
+
+def test_weakref_gc_method():
+    """The method and its object are garbage collected properly."""
+
+    class TempClass:
+        def method(self, x):
+            return x * 4
+
+    def create_method_wrapper():
+        obj = TempClass()
+        return WeakrefCallable(obj.method), obj
+
+    wrc, obj_ref = create_method_wrapper()
+
+    # Object still exists, method should work
+    assert wrc(2) == 8
+
+    # Delete the reference to the object
+    del obj_ref
+
+    # Force garbage collection
+    gc.collect()
+
+    # The method reference should be gone
+    assert wrc.ref() is None
+
+
+def test_weakref_callable_object():
+    """WeakrefCallable works with callable objects."""
+
+    class CallableObject:
+        def __call__(self, x):
+            return x * 5
+
+    obj = CallableObject()
+    wrc = WeakrefCallable(obj)
+
+    # Test call
+    assert wrc(2) == 10
+
+
+def test_weakref_none_result_when_function_gone():
+    """Calling the wrapper after the target is collected doesn't error."""
+
+    def create_function_wrapper():
+        def temp_func(x):
+            return x * 3
+
+        return WeakrefCallable(temp_func)
+
+    wrc = create_function_wrapper()
+
+    # Force garbage collection
+    gc.collect()
+
+    # Calling the wrapper should not raise an error
+    result = wrc(10)
+    assert result is None

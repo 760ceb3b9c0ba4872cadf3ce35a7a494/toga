@@ -6,7 +6,10 @@ project_name = "ImageView Demo"
 bundle = "org.beeware.toga.examples"
 version = "0.0.1"
 url = "https://beeware.org"
-license.file = "LICENSE"
+license = "BSD-3-Clause"
+license-files = [
+    "LICENSE",
+]
 author = "Tiberius Yak"
 author_email = "tiberius@beeware.org"
 
@@ -50,8 +53,7 @@ requires = [
 [tool.briefcase.app.imageview.android]
 requires = [
     "../../android",
-    "Pillow==9.2.0; python_version=='3.10' or python_version=='3.9'",
-    "Pillow==8.4.0; python_version=='3.8'",
+    "Pillow==9.2.0",
 ]
 
 base_theme = "Theme.MaterialComponents.Light.DarkActionBar"
@@ -65,4 +67,3 @@ build_gradle_dependencies = [
 requires = [
     "../../web",
 ]
-style_framework = "Shoelace v2.3"

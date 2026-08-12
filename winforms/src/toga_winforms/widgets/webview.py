@@ -1,8 +1,19 @@
+import hashlib
 import json
+import shutil
 import webbrowser
 from http.cookiejar import Cookie, CookieJar
 
 import System.Windows.Forms as WinForms
+import WebView2 as WebView2Runtime  # noqa: F401
+from Microsoft.Web.WebView2.Core import (
+    CoreWebView2Cookie,
+    WebView2RuntimeNotFoundException,
+)
+from Microsoft.Web.WebView2.WinForms import (
+    CoreWebView2CreationProperties,
+    WebView2,
+)
 from System import (
     Action,
     String,
@@ -13,15 +24,9 @@ from System.Drawing import Color
 from System.Threading.Tasks import Task, TaskScheduler
 
 import toga
+from toga.handlers import WeakrefCallable
 from toga.widgets.webview import CookiesResult, JavaScriptResult
-from toga_winforms.libs.extensions import (
-    CoreWebView2Cookie,
-    CoreWebView2CreationProperties,
-    WebView2,
-    WebView2RuntimeNotFoundException,
-)
 
-from ..libs.wrapper import WeakrefCallable
 from .base import Widget
 
 
@@ -96,7 +101,21 @@ class WebView(Widget):
         self.corewebview2_available = None
         self.pending_tasks = []
         self.native.EnsureCoreWebView2Async(None)
-        self.native.DefaultBackgroundColor = Color.Transparent
+
+        # attribute to store the URL allowed by user interaction or
+        # user on_navigation_starting handler
+        self._allowed_url = None
+
+        # folder for temporary storing content larger than 2 MB
+        self._large_content_dir = (
+            toga.App.app.paths.cache / f"toga/webview-{self.interface.id}"
+        )
+
+        self._default_background_color = Color.Transparent
+
+    def __del__(self):  # pragma: nocover
+        """Cleaning up the cached files for large content"""
+        shutil.rmtree(self._large_content_dir, ignore_errors=True)
 
     # Any non-trivial use of the WebView requires the CoreWebView2 object to be
     # initialized, which is asynchronous. Since most of this class's methods are not
@@ -135,6 +154,10 @@ class WebView(Widget):
             settings.IsSwipeNavigationEnabled = False
             settings.IsZoomControlEnabled = True
 
+            self.native.CoreWebView2.NavigationStarting += WeakrefCallable(
+                self.winforms_navigation_starting
+            )
+
             for task in self.pending_tasks:
                 task()
             self.pending_tasks = None
@@ -158,7 +181,7 @@ class WebView(Widget):
                     WinForms.MessageBoxIcon.Error,
                 )
                 webbrowser.open(
-                    "https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download"  # noqa: E501
+                    "https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download"
                 )
 
         else:  # pragma: nocover
@@ -178,6 +201,28 @@ class WebView(Widget):
             self.loaded_future.set_result(None)
             self.loaded_future = None
 
+    def winforms_navigation_starting(self, sender, event):
+        if self.interface.on_navigation_starting._raw:
+            # check URL permission
+            if self._allowed_url == "about:blank" or self._allowed_url == event.Uri:
+                # URL is allowed by user code
+                allow = True
+            else:
+                # allow the URL only once
+                self._allowed_url = None
+                result = self.interface.on_navigation_starting(url=event.Uri)
+                if isinstance(result, bool):
+                    # on_navigation_starting handler is synchronous
+                    allow = result
+                else:
+                    # on_navigation_starting handler is asynchronous
+                    # deny navigation until the user defined on_navigation_starting
+                    # coroutine has completed.
+                    allow = False
+            if not allow:
+                # Deny navigation
+                event.Cancel = True
+
     def get_url(self):
         source = self.native.Source
         if source is None:  # pragma: nocover
@@ -188,6 +233,9 @@ class WebView(Widget):
 
     @requires_initialization
     def set_url(self, value, future=None):
+        if self.interface.on_navigation_starting._raw:
+            # mark URL as being allowed
+            self._allowed_url = value
         self.loaded_future = future
         if value is None:
             self.set_content("about:blank", "")
@@ -196,8 +244,23 @@ class WebView(Widget):
 
     @requires_initialization
     def set_content(self, root_url, content):
-        # There appears to be no way to pass the root_url.
-        self.native.NavigateToString(content)
+        if self.interface.on_navigation_starting._raw:
+            # mark URL as being allowed
+            self._allowed_url = "about:blank"
+        if len(content) > 1572834:
+            # according to the Microsoft documentation, the max content size is
+            # 2 MB, but in fact, the limit seems to be at about 1.5 MB
+            self._large_content_dir.mkdir(parents=True, exist_ok=True)
+            h = hashlib.new("sha1")
+            h.update(bytes(self.interface.id, "utf-8"))
+            h.update(bytes(root_url, "utf-8"))
+            file_name = h.hexdigest() + ".html"
+            file_path = self._large_content_dir / file_name
+            file_path.write_text(content, encoding="utf-8")
+            self.set_url(file_path.as_uri())
+        else:
+            # There appears to be no way to pass the root_url.
+            self.native.NavigateToString(content)
 
     def get_user_agent(self):
         if self.corewebview2_available:
@@ -250,3 +313,7 @@ class WebView(Widget):
 
         self.run_after_initialization(execute)
         return result
+
+    def set_background_color(self, color):
+        super().set_background_color(color)
+        self.native.DefaultBackgroundColor = self.native.BackColor

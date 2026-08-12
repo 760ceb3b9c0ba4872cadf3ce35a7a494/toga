@@ -24,6 +24,10 @@ class TableProbe(SimpleProbe):
         pytest.skip("Can't set background color on GTK Tables")
 
     @property
+    def has_focus(self):
+        return self.native_table.has_focus()
+
+    @property
     def row_count(self):
         return len(self.native_table.get_model())
 
@@ -41,6 +45,9 @@ class TableProbe(SimpleProbe):
 
     def column_width(self, col):
         return self.native_table.get_column(col).get_width()
+
+    async def resize_column(self, index, width):
+        self.native_table.get_column(index).set_fixed_width(round(width))
 
     def assert_cell_content(self, row, col, value=None, icon=None, widget=None):
         if widget:
@@ -88,5 +95,10 @@ class TableProbe(SimpleProbe):
             self.native_table.get_columns()[0],
         )
 
-    async def acquire_keyboard_focus(self):
+    async def select_first_row_keyboard(self):
         pytest.skip("test not implemented for this platform")
+
+    async def activate_header(self):
+        # No action needed; header activation is unrelated to
+        # and does not contain a bug for regular selection
+        pass

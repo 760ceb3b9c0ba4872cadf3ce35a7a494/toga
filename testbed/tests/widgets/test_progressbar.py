@@ -2,14 +2,21 @@ import pytest
 
 import toga
 
+from ..conftest import skip_on_backends
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
     test_enable_noop,
     test_flex_horizontal_widget_size,
 )
 
-# Progressbar can't be given focus on mobile, or on GTK
-if toga.platform.current_platform in {"android", "iOS", "linux"}:
+skip_on_backends(
+    "toga_textual",
+    reason="ProgressBar is not implemented on Textual.",
+    allow_module_level=True,
+)
+
+# ProgressBar can't be given focus on mobile or GTK.
+if toga.backend in {"toga_gtk", "toga_android", "toga_iOS"}:
     from .properties import test_focus_noop  # noqa: F401
 else:
     from .properties import test_focus  # noqa: F401

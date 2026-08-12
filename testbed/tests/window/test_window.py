@@ -5,9 +5,10 @@ from importlib import import_module
 from unittest.mock import Mock
 
 import pytest
+from pytest import approx
 
 import toga
-from toga.colors import CORNFLOWERBLUE, GOLDENROD, REBECCAPURPLE
+from toga.colors import CORNFLOWERBLUE, GOLDENROD, LIGHTBLUE, REBECCAPURPLE
 from toga.constants import WindowState
 from toga.style.pack import COLUMN, Pack
 
@@ -16,6 +17,13 @@ from ..assertions import (
     assert_window_lose_focus,
     assert_window_on_hide,
     assert_window_on_show,
+)
+from ..conftest import skip_on_backends
+
+skip_on_backends(
+    "toga_textual",
+    reason="Full window management assertions are not implemented on Textual.",
+    allow_module_level=True,
 )
 
 
@@ -37,10 +45,18 @@ async def second_window_probe(app, app_probe, second_window):
     return probe
 
 
-async def test_title(main_window, main_window_probe):
+def assert_size(window, expected):
+    size = window.size
+    assert isinstance(size.width, int)
+    assert isinstance(size.height, int)
+    assert size == expected
+
+
+async def test_title(main_window, app_probe, main_window_probe):
     """The title of a window can be changed"""
+    formal_name = getattr(app_probe, "formal_name", "Toga Testbed")
     original_title = main_window.title
-    assert original_title == "Toga Testbed"
+    assert original_title == formal_name
     await main_window_probe.wait_for_window("Window title can be retrieved")
 
     try:
@@ -49,7 +65,7 @@ async def test_title(main_window, main_window_probe):
         await main_window_probe.wait_for_window("Window title can be changed")
     finally:
         main_window.title = original_title
-        assert main_window.title == "Toga Testbed"
+        assert main_window.title == formal_name
         await main_window_probe.wait_for_window("Window title can be reverted")
 
 
@@ -91,12 +107,12 @@ if toga.platform.current_platform in {"iOS", "android"}:
 
         main_window.position = (150, 50)
         await main_window_probe.wait_for_window("Main window can't be moved")
-        assert main_window.size == initial_size
+        assert_size(main_window, initial_size)
         assert main_window.position == (0, 0)
 
         main_window.size = (200, 150)
         await main_window_probe.wait_for_window("Main window cannot be resized")
-        assert main_window.size == initial_size
+        assert_size(main_window, initial_size)
         assert main_window.position == (0, 0)
 
         orig_content = main_window.content
@@ -111,7 +127,7 @@ if toga.platform.current_platform in {"iOS", "android"}:
                 style=Pack(direction=COLUMN, background_color=CORNFLOWERBLUE),
             )
             await main_window_probe.wait_for_window("Main window content has been set")
-            assert main_window.size == initial_size
+            assert_size(main_window, initial_size)
             assert main_window_probe.content_size == content_size
 
             # Alter the content width to exceed window width
@@ -119,7 +135,7 @@ if toga.platform.current_platform in {"iOS", "android"}:
             await main_window_probe.wait_for_window(
                 "Content is too wide for the window"
             )
-            assert main_window.size == initial_size
+            assert_size(main_window, initial_size)
             assert main_window_probe.content_size == content_size
 
             space_warning = (
@@ -131,7 +147,7 @@ if toga.platform.current_platform in {"iOS", "android"}:
             # Resize content to fit
             box1.style.width = 100
             await main_window_probe.wait_for_window("Content fits in window")
-            assert main_window.size == initial_size
+            assert_size(main_window, initial_size)
             assert main_window_probe.content_size == content_size
             assert not re.search(space_warning, capsys.readouterr().out)
 
@@ -140,7 +156,7 @@ if toga.platform.current_platform in {"iOS", "android"}:
             await main_window_probe.wait_for_window(
                 "Content is too tall for the window"
             )
-            assert main_window.size == initial_size
+            assert_size(main_window, initial_size)
             assert main_window_probe.content_size == content_size
             assert re.search(space_warning, capsys.readouterr().out)
 
@@ -316,7 +332,7 @@ if toga.platform.current_platform in {"iOS", "android"}:
         initial_size = main_window.size
         main_window.position = (150, 50)
         await main_window_probe.wait_for_window("Main window can't be moved")
-        assert main_window.size == initial_size
+        assert_size(main_window, initial_size)
         assert main_window.position == (0, 0)
         assert main_window.screen_position == (0, 0)
 
@@ -329,13 +345,15 @@ else:
         "second_window_class, second_window_kwargs",
         [(toga.Window, {})],
     )
-    async def test_secondary_window(app, second_window, second_window_probe):
+    async def test_secondary_window(app, app_probe, second_window, second_window_probe):
         """A secondary window can be created"""
+        formal_name = getattr(app_probe, "formal_name", "Toga Testbed")
         assert second_window.app == app
         assert second_window in app.windows
 
-        assert second_window.title == "Toga Testbed"
-        assert second_window.size == (640, 480)
+        assert second_window.title == formal_name
+        # Qt rendering results in a small change in window size
+        assert_size(second_window, approx((640, 480), abs=2))
         # Position should be cascaded; the exact position depends on the platform,
         # and how many windows have been created. As long as it's not at (100,100).
         if second_window_probe.supports_placement:
@@ -377,7 +395,8 @@ else:
         assert second_window in app.windows
 
         assert second_window.title == "Secondary Window"
-        assert second_window.size == (300, 200)
+        # Qt rendering can result in a small change in window size
+        assert_size(second_window, approx((300, 200), abs=2))
         if second_window_probe.supports_placement:
             assert second_window.position == (200, 300)
 
@@ -565,7 +584,8 @@ else:
         assert second_window in app.windows
 
         assert second_window.visible
-        assert second_window.size == (640, 480)
+        # Qt rendering can result in a small change in window size
+        assert_size(second_window, approx((640, 480), abs=2))
         if second_window_probe.supports_placement:
             assert second_window.position == (200, 150)
 
@@ -573,7 +593,7 @@ else:
         second_window.position = (250, 200)
 
         await second_window_probe.wait_for_window("Secondary window has been moved")
-        assert second_window.size == (640, 480)
+        assert_size(second_window, approx((640, 480), abs=2))
         if second_window_probe.supports_placement:
             assert second_window.position == (250, 200)
 
@@ -584,7 +604,7 @@ else:
             "Secondary window has been resized; position has not changed"
         )
 
-        assert second_window.size == (300, 250)
+        assert_size(second_window, approx((300, 250), abs=2))
         # We can't confirm position here, because it may have changed. macOS rescales
         # windows relative to the bottom-left corner, which means the position of the
         # window has changed relative to the Toga coordinate frame.
@@ -604,7 +624,7 @@ else:
         )
 
         assert second_window.visible
-        assert second_window.size == (250, 200)
+        assert_size(second_window, approx((250, 200), abs=2))
         if (
             second_window_probe.supports_move_while_hidden
             and second_window_probe.supports_placement
@@ -631,7 +651,7 @@ else:
 
             assert not second_window_probe.is_minimized
             # Window size hasn't changed as a result of min/unmin cycle
-            assert second_window.size == (250, 200)
+            assert_size(second_window, approx((250, 200), abs=2))
 
         second_window_probe.close()
         await second_window_probe.wait_for_window("Secondary window has been closed")
@@ -665,10 +685,14 @@ else:
 
         second_window.size = (200, 150)
         await second_window_probe.wait_for_window("Secondary window has been resized")
-        assert second_window.size == (200, 150)
-        assert second_window_probe.content_size == (
-            200 - extra_width,
-            150 - extra_height,
+        # Qt rendering can result in a small change in window size
+        assert_size(second_window, approx((200, 150), abs=2))
+        assert second_window_probe.content_size == approx(
+            (
+                200 - extra_width,
+                150 - extra_height,
+            ),
+            abs=2,
         )
 
         box1 = toga.Box(style=Pack(background_color=REBECCAPURPLE, width=10, height=10))
@@ -680,25 +704,46 @@ else:
         await second_window_probe.wait_for_window(
             "Secondary window has had height adjusted due to content"
         )
-        assert second_window.size == (200, 210 + extra_height)
-        assert second_window_probe.content_size == (200 - extra_width, 210)
+        assert_size(second_window, approx((200, 210 + extra_height), abs=2))
+        assert second_window_probe.content_size == approx(
+            (200 - extra_width, 210), abs=2
+        )
 
         # Alter the content width to exceed window size
         box1.style.width = 250
         await second_window_probe.wait_for_window(
             "Secondary window has had width adjusted due to content"
         )
-        assert second_window.size == (250 + extra_width, 210 + extra_height)
-        assert second_window_probe.content_size == (250, 210)
+        assert_size(
+            second_window,
+            approx((250 + extra_width, 210 + extra_height), abs=2),
+        )
+
+        # Alter both height and width to exceed window size at once
+        box3 = toga.Box(style=Pack(background_color=LIGHTBLUE, width=300, height=90))
+        second_window.content.add(box3)
+        await second_window_probe.wait_for_window(
+            "Secondary window has had width and height adjusted due to content"
+        )
+        assert_size(
+            second_window,
+            approx((300 + extra_width, 300 + extra_height), abs=2),
+        )
+        assert second_window_probe.content_size == approx((300, 300), abs=2)
 
         # Try to resize to a size less than the content size
         second_window.size = (200, 150)
         await second_window_probe.wait_for_window(
             "Secondary window forced resize fails"
         )
-        assert second_window.size == (250 + extra_width, 210 + extra_height)
-        assert second_window_probe.content_size == (250, 210)
+        assert_size(
+            second_window,
+            approx((300 + extra_width, 300 + extra_height), abs=2),
+        )
+        assert second_window_probe.content_size == approx((300, 300), abs=2)
 
+    # FULLSCREEN->MAXIMIZED known to be flaky on x86_64 - see #3897
+    @pytest.mark.flaky(retries=5, delay=1)
     @pytest.mark.parametrize(
         "initial_state, final_state",
         [
@@ -762,11 +807,74 @@ else:
         second_window.toolbar.add(app.cmd1)
         second_window.content = toga.Box(style=Pack(background_color=CORNFLOWERBLUE))
         second_window.show()
-        second_window.on_show = Mock()
-        second_window.on_hide = Mock()
         # Wait for window animation before assertion.
         await second_window_probe.wait_for_window("Secondary window is visible")
         assert second_window_probe.instantaneous_state == WindowState.NORMAL
+
+        closure_exception = None
+
+        def check_initial_state_size(window):
+            if second_window_probe.instantaneous_state == initial_state:
+                assert second_window.size > previous_state_window_size
+
+        def check_final_state_size(window):
+            if second_window_probe.instantaneous_state == final_state:
+                current_size = second_window.size
+                nonlocal closure_exception
+                try:
+                    if initial_state == WindowState.NORMAL:
+                        assert current_size > previous_state_window_size
+                    elif initial_state == WindowState.MAXIMIZED:
+                        if final_state in {
+                            WindowState.FULLSCREEN,
+                            WindowState.PRESENTATION,
+                        }:
+                            if second_window_probe.maximize_fullscreen_presentation_equal_size:  # noqa: E501
+                                assert current_size == previous_state_window_size
+                            else:
+                                assert current_size > previous_state_window_size
+                        else:
+                            assert current_size < previous_state_window_size
+                    elif initial_state == WindowState.FULLSCREEN:
+                        if final_state == WindowState.PRESENTATION:
+                            if second_window_probe.fullscreen_presentation_equal_size:
+                                assert current_size == previous_state_window_size
+                            else:
+                                assert current_size > previous_state_window_size
+                        elif final_state == WindowState.MAXIMIZED:
+                            if second_window_probe.maximize_fullscreen_presentation_equal_size:  # noqa: E501
+                                assert current_size == previous_state_window_size
+                            else:
+                                assert current_size < previous_state_window_size
+                        else:
+                            assert current_size < previous_state_window_size
+                    elif initial_state == WindowState.PRESENTATION:
+                        if final_state == WindowState.FULLSCREEN:
+                            if second_window_probe.fullscreen_presentation_equal_size:
+                                assert current_size == previous_state_window_size
+                            else:
+                                assert current_size < previous_state_window_size
+                        elif final_state == WindowState.MAXIMIZED:
+                            if second_window_probe.maximize_fullscreen_presentation_equal_size:  # noqa: E501
+                                assert current_size == previous_state_window_size
+                            else:
+                                assert current_size < previous_state_window_size
+                        else:
+                            assert current_size < previous_state_window_size
+                except Exception as e:
+                    closure_exception = e
+
+        # Set up event mocks after the test window has been initialized.
+        # This prevents unnecessary mock triggers during setup, which could
+        # lead to false assertion errors later by incorrectly indicating that
+        # the event was triggered.
+        second_window.on_show = Mock()
+        second_window.on_hide = Mock()
+        second_window_on_resize_handler = Mock()
+        second_window.on_resize = second_window_on_resize_handler
+
+        previous_state_window_size = second_window.size
+        second_window_on_resize_handler.side_effect = check_initial_state_size
 
         # Set to initial state
         second_window.state = initial_state
@@ -775,6 +883,23 @@ else:
             f"Secondary window is in {initial_state}", state=initial_state
         )
         assert second_window_probe.instantaneous_state == initial_state
+
+        # Check and raise exceptions that may have occurred inside closures.
+        if closure_exception:
+            raise closure_exception
+
+        # Check for resize event notification
+        if initial_state in {WindowState.NORMAL, WindowState.MINIMIZED}:
+            # on_resize() will not be triggered, as the state change
+            # between NORMAL <-> MINIMIZED doesn't resize the window,
+            # and state change between NORMAL <-> NORMAL is a no-op.
+            second_window_on_resize_handler.assert_not_called()
+            second_window_on_resize_handler.reset_mock()
+            # Window size should remain the same
+            assert_size(second_window, previous_state_window_size)
+        else:
+            second_window_on_resize_handler.assert_called_with(second_window)
+            second_window_on_resize_handler.reset_mock()
 
         # Check for visibility event notification
         if initial_state == WindowState.MINIMIZED:
@@ -787,13 +912,41 @@ else:
             # was set to a visible-to-user(not minimized) state.
             assert_window_on_show(second_window, trigger_expected=False)
 
+        previous_state_window_size = second_window.size
+        second_window_on_resize_handler.side_effect = check_final_state_size
+
         # Set to final state
         second_window.state = final_state
         # Wait for window animation before assertion.
         await second_window_probe.wait_for_window(
             f"Secondary window is in {final_state}", state=final_state
         )
-        assert second_window_probe.instantaneous_state == final_state
+
+        # Check and raise exceptions that may have occurred inside closures.
+        if closure_exception:
+            raise closure_exception
+
+        # Check for resize event notification
+        # State change between NORMAL <-> MINIMIZED doesn't
+        # constitute a window resize operation.
+        resize_expected = (initial_state != final_state) and {
+            initial_state,
+            final_state,
+        } != {WindowState.NORMAL, WindowState.MINIMIZED}
+        if resize_expected:
+            # on_resize() event may be triggered multiple times, depending
+            # upon the backend. For example: for a state change between:
+            # FULLSCREEN -> MAXIMIZED, the actual window transition would
+            # be: FULLSCREEN -> NORMAL -> MAXIMIZED. Therefore, on_resize()
+            # would be triggered multiple times. Hence, just assert that the
+            # on_resize() event has been called.
+            second_window_on_resize_handler.assert_called_with(second_window)
+            second_window_on_resize_handler.reset_mock()
+        else:
+            second_window_on_resize_handler.assert_not_called()
+            second_window_on_resize_handler.reset_mock()
+            # Window size should remain the same
+            assert_size(second_window, previous_state_window_size)
 
         # Check for visibility event notification
         if initial_state == WindowState.MINIMIZED:
@@ -815,6 +968,7 @@ else:
                 # already in a visible-to-user(not minimized) state.
                 assert_window_on_show(second_window, trigger_expected=False)
 
+    @pytest.mark.flaky(retries=5, delay=1)
     @pytest.mark.parametrize(
         "states",
         [
@@ -829,6 +983,10 @@ else:
             # Complex state changes on gtk:
             (WindowState.FULLSCREEN, WindowState.PRESENTATION),
             (WindowState.PRESENTATION, WindowState.NORMAL),
+            # Complex state changes on qt:
+            (WindowState.FULLSCREEN, WindowState.MAXIMIZED),
+            (WindowState.PRESENTATION, WindowState.MAXIMIZED),
+            (WindowState.MINIMIZED, WindowState.MAXIMIZED),
         ],
     )
     @pytest.mark.parametrize(
@@ -846,7 +1004,7 @@ else:
         """The backends can handle rapid assignment of new window states."""
         # Check that the state to be asserted is supported by the backend.
         if (
-            states[-1] == WindowState.MINIMIZED
+            WindowState.MINIMIZED in states
             and not second_window_probe.supports_minimize
         ):
             pytest.xfail(
@@ -999,10 +1157,6 @@ else:
     ):
         """When a window is hidden using hide(), the window.state getter should
         continue to report the same state as it did when the window was last visible."""
-        if state == WindowState.MINIMIZED and not second_window_probe.supports_minimize:
-            pytest.xfail(
-                "This backend doesn't reliably support minimized window state."
-            )
         second_window.content = toga.Box(style=Pack(background_color=CORNFLOWERBLUE))
         second_window.show()
         # Wait for window animation before assertion.
@@ -1018,6 +1172,10 @@ else:
 
         second_window.hide()
         await second_window_probe.wait_for_window("Secondary window is hidden")
+        assert second_window.state == window_state_before_hidden
+
+        second_window.show()
+        await second_window_probe.wait_for_window("Secondary window shown")
         assert second_window.state == window_state_before_hidden
 
     @pytest.mark.parametrize(
@@ -1092,6 +1250,54 @@ else:
             )
         ],
     )
+    async def test_resize_event(second_window, second_window_probe):
+        """The window can trigger on_resize() event handler, when the window
+        size is changed."""
+        second_window.content = toga.Box(style=Pack(background_color=CORNFLOWERBLUE))
+        second_window.show()
+        expected_window_size = None
+
+        def check_new_size_on_resize(window):
+            assert_size(window, expected_window_size)
+
+        second_window_on_resize_handler = Mock()
+        second_window_on_resize_handler.side_effect = check_new_size_on_resize
+        # Register the event handler.
+        second_window.on_resize = second_window_on_resize_handler
+        await second_window_probe.wait_for_window("Second window has been shown")
+        initial_size = second_window.size
+
+        # Resize the window, on_resize() will be triggered with the new size.
+        expected_window_size = (200, 150)
+        second_window.size = (200, 150)
+        await second_window_probe.wait_for_window("Second window has been resized")
+        assert_size(second_window, (200, 150))
+        second_window_on_resize_handler.assert_called_with(second_window)
+        second_window_on_resize_handler.reset_mock()
+
+        # Resize to initial size, on_resize() will be triggered with the new size.
+        expected_window_size = initial_size
+        second_window.size = initial_size
+        await second_window_probe.wait_for_window("Second window has been resized")
+        assert_size(second_window, initial_size)
+        second_window_on_resize_handler.assert_called_with(second_window)
+        second_window_on_resize_handler.reset_mock()
+
+        # Again resize to initial size, on_resize() will not be triggered
+        second_window.size = initial_size
+        await second_window_probe.wait_for_window("Second window has been resized")
+        assert_size(second_window, initial_size)
+        second_window_on_resize_handler.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "second_window_class, second_window_kwargs",
+        [
+            (
+                toga.Window,
+                {"title": "Secondary Window", "position": (200, 150)},
+            )
+        ],
+    )
     async def test_screen(second_window, second_window_probe):
         """The window can be relocated to another screen, using both absolute and
         relative screen positions."""
@@ -1106,9 +1312,12 @@ else:
         assert second_window.position != initial_position
 
         # `position` and `screen_position` will be same as the window will be in
-        # primary screen.
+        # primary screen. They are also 2-tuples of integers
         assert second_window.position == (200, 200)
+        assert all(isinstance(val, int) for val in second_window.position)
+
         assert second_window.screen_position == (200, 200)
+        assert all(isinstance(val, int) for val in second_window.screen_position)
 
         # Move the window between available screens and assert its `screen_position`
         for screen in second_window.app.screens:
@@ -1121,6 +1330,7 @@ else:
                 second_window.position[0] - screen.origin[0],
                 second_window.position[1] - screen.origin[1],
             )
+            assert all(isinstance(val, int) for val in second_window.screen_position)
 
 
 async def test_as_image(main_window, main_window_probe):
@@ -1132,4 +1342,5 @@ async def test_as_image(main_window, main_window_probe):
             screenshot.size,
             main_window_probe.content_size,
             screen=main_window.screen,
+            window=main_window,
         )

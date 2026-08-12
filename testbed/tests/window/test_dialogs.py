@@ -8,7 +8,15 @@ import pytest
 
 import toga
 
+from ..conftest import skip_on_backends
+
 TESTS_DIR = Path(__file__).parent.parent
+
+skip_on_backends(
+    "toga_textual",
+    reason="Dialogs are not implemented on Textual.",
+    allow_module_level=True,
+)
 
 
 @pytest.fixture
@@ -182,7 +190,7 @@ async def test_save_file_dialog(
         # Successful single select with no initial directory
         (None, None, False, TESTS_DIR / "data.py"),
         # Successful single select with file types
-        (TESTS_DIR, ["txt"], False, TESTS_DIR / "data.py"),
+        (TESTS_DIR, ["py"], False, TESTS_DIR / "data.py"),
         # Successful multiple selection
         (
             TESTS_DIR,
@@ -199,7 +207,7 @@ async def test_save_file_dialog(
         # Successful multiple selection with file types
         (
             TESTS_DIR,
-            ["txt", "doc"],
+            ["txt", "py"],
             True,
             [TESTS_DIR / "conftest.py", TESTS_DIR / "data.py"],
         ),

@@ -359,6 +359,13 @@ NSBackingStoreRetained = 0
 NSBackingStoreNonretained = 1
 NSBackingStoreBuffered = 2
 
+
+class NSFocusRingType(IntEnum):
+    Default = 0
+    None_ = 1
+    Exterior = 2
+
+
 ######################################################################
 # NSGraphicsContext.h
 NSGraphicsContext = ObjCClass("NSGraphicsContext")
@@ -566,6 +573,11 @@ NSProgressIndicatorSpinningStyle = 1
 NSApplicationActivationPolicyRegular = 0
 NSApplicationActivationPolicyAccessory = 1
 NSApplicationActivationPolicyProhibited = 2
+
+# NSApplicationTerminateReply
+NSTerminateCancel = 0
+NSTerminateNow = 1
+NSTerminateLater = 2
 
 ######################################################################
 # NSSavePanel.h

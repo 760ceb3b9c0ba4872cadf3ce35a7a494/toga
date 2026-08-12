@@ -1,3 +1,7 @@
+# MkDocs
+_build
+comment.md
+
 *.pyc
 *~
 .*.sw[op]
@@ -10,7 +14,6 @@ coverage.xml
 dist
 build
 logs
-_build
 distribute-*
 docs/env
 local
@@ -26,22 +29,32 @@ gtk/cairo
 pip-selfcheck.json
 pyvenv.cfg
 .vscode
+.zed
 .envrc
 bin/
 lib/
 .ruff_cache/
-
-# Exclude briefcase packages from the examples dir.
-examples/*/macOS/
-examples/*/iOS/
-examples/*/linux/
-examples/*/android/
-examples/*/django/
-examples/*/windows/
-examples/*/web/
+.python-version
 
 # Memory Profiler
 mprofile_*.dat
 
-# Briefcase log files.
-briefcase.*.log
+# Briefcase
+.briefcase
+
+# AI tooling (SpecKit v0.8.0)
+.github/agents/
+.github/copilot-instructions.md
+.github/prompts/
+.opencode/
+.specify/extensions
+.specify/extensions.yml
+.specify/feature.json
+.specify/init-options.json
+.specify/integration.json
+.specify/integrations
+.specify/scripts
+.specify/templates
+.specify/workflow.yml
+.specify/workflows
+specs/

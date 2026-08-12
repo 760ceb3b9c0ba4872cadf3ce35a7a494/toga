@@ -6,13 +6,19 @@ from toga.colors import CORNFLOWERBLUE, GOLDENROD, REBECCAPURPLE
 from toga.constants import Direction
 from toga.style.pack import Pack
 
-from ..conftest import skip_on_platforms
+from ..conftest import skip_on_backends, skip_on_platforms
 from .conftest import build_cleanup_test
 from .probe import get_probe
 from .properties import (  # noqa: F401
     test_enable_noop,
     test_flex_widget_size,
     test_focus_noop,
+)
+
+skip_on_backends(
+    "toga_textual",
+    reason="SplitContainer is not implemented on Textual.",
+    allow_module_level=True,
 )
 
 
@@ -102,6 +108,28 @@ async def test_set_content(
     await probe.wait_for_split()
     await probe.redraw("Content should have a 50:50 split, but only left content")
     assert content2_probe.width == pytest.approx(probe.width / 2, abs=20)
+
+
+async def test_zero_size_split_preserve(
+    widget,
+    probe,
+    content1,
+    content1_probe,
+    content2,
+    content2_probe,
+):
+    """In cases where a widget's initial layout is incorrect and leads to
+    zero size, split proportions are still preserved"""
+    widget.width = 0
+    await probe.redraw("Widget width set to 0")
+    widget.content = [(content1, 1), (content2, 2)]
+    await probe.wait_for_split()
+    await probe.redraw("33.33/66.67 split applied")
+    del widget.width
+    await probe.wait_for_split()
+    await probe.redraw("Widget should now have nonzero size")
+    assert content1_probe.width == approx(probe.width * 1 / 3, abs=20)
+    assert content2_probe.width == approx(probe.width * 2 / 3, abs=20)
 
 
 async def test_set_direction(

@@ -8,6 +8,12 @@ from .list_source import Row, _find_item
 
 T = TypeVar("T")
 
+TreeSourceT = TypeVar("TreeSourceT", bound=Source)
+"""
+A type describing any object adhering to the same interface as
+[TreeSource][toga.sources.TreeSource].
+"""
+
 
 class Node(Row[T]):
     _source: TreeSource
@@ -22,7 +28,7 @@ class Node(Row[T]):
         and marked unable to have children).
 
         When any public attributes of the node are modified (i.e., any attribute whose
-        name doesn't start with ``_``), the source to which the node belongs will be
+        name doesn't start with `_`), the source to which the node belongs will be
         notified.
         """
         super().__init__(**data)
@@ -77,8 +83,8 @@ class Node(Row[T]):
     def can_have_children(self) -> bool:
         """Can the node have children?
 
-        A value of :any:`True` does not necessarily mean the node *has* any children,
-        only that the node is *allowed* to have children. The value of ``len()`` for
+        A value of [`True`][] does not necessarily mean the node *has* any children,
+        only that the node is *allowed* to have children. The value of `len()` for
         the node indicates the number of actual children.
         """
         return self._children is not None
@@ -154,7 +160,7 @@ class Node(Row[T]):
         This search uses Node instances, and searches for an *instance* match.
         If two Node instances have the same values, only the Node that is the
         same Python instance will match. To search for values based on equality,
-        use :meth:`~toga.sources.Node.find`.
+        use [`Node.find()`][toga.sources.Node.find].
 
         :param child: The node to find in the children of this node.
         :returns: The index of the node in the children of this node.
@@ -172,13 +178,13 @@ class Node(Row[T]):
         This is a value based search, rather than an instance search. If two Node
         instances have the same values, the first instance that matches will be
         returned. To search for a second instance, provide the first found instance as
-        the ``start`` argument. To search for a specific Node instance, use the
-        :meth:`~toga.sources.Node.index`.
+        the `start` argument. To search for a specific Node instance, use the
+        [`Node.index()`][toga.sources.Node.index].
 
         :param data: The data to search for. Only the values specified in data will be
             used as matching criteria; if the node contains additional data attributes,
             they won't be considered as part of the match.
-        :param start: The instance from which to start the search. Defaults to ``None``,
+        :param start: The instance from which to start the search. Defaults to `None`,
             indicating that the first match should be returned.
         :return: The matching Node object.
         :raises ValueError: If no match is found.
@@ -193,26 +199,40 @@ class Node(Row[T]):
             accessors=self._source._accessors,
             start=start,
             error=f"No child matching {data!r} in {self}",
+            value_type="node",
         )
 
 
 class TreeSource(Source):
     _roots: list[Node]
+    _accessors: list[str] | None
 
-    def __init__(self, accessors: Iterable[str], data: object | None = None):
+    def __init__(
+        self,
+        accessors: Iterable[str] | None = None,
+        data: object | None = None,
+    ):
         super().__init__()
-        if isinstance(accessors, str) or not hasattr(accessors, "__iter__"):
-            raise ValueError("accessors should be a list of attribute names")
-
-        # Copy the list of accessors
-        self._accessors = list(accessors)
-        if len(self._accessors) == 0:
-            raise ValueError("TreeSource must be provided a list of accessors")
+        match accessors:
+            case None:
+                self._accessors = None
+            case Iterable() if not isinstance(accessors, str):
+                # Copy the list of accessors
+                self._accessors = list(accessors)
+            case _:
+                raise ValueError("accessors should be a list of attribute names")
 
         if data is not None:
             self._roots = self._create_nodes(parent=None, value=data)
         else:
             self._roots = []
+
+    @property
+    def accessors(self) -> list[str] | None:
+        """The attribute names for accessing the value in each column of a row."""
+        if self._accessors is None:
+            return None
+        return self._accessors.copy()
 
     ######################################################################
     # Methods required by the TreeSource interface
@@ -242,10 +262,13 @@ class TreeSource(Source):
     ) -> Node:
         if isinstance(data, Mapping):
             node = Node(**data)
-        elif hasattr(data, "__iter__") and not isinstance(data, str):
-            node = Node(**dict(zip(self._accessors, data)))
+        elif self._accessors is not None:
+            if hasattr(data, "__iter__") and not isinstance(data, str):
+                node = Node(**dict(zip(self._accessors, data, strict=False)))
+            else:
+                node = Node(**{self._accessors[0]: data})
         else:
-            node = Node(**{self._accessors[0]: data})
+            raise ValueError("TreeSource requires accessors for non-mapping node data")
 
         node._parent = parent
         node._source = self
@@ -256,18 +279,19 @@ class TreeSource(Source):
         return node
 
     def _create_nodes(self, parent: Node | None, value: object) -> list[Node]:
-        if isinstance(value, Mapping):
-            return [
-                self._create_node(parent=parent, data=data, children=children)
-                for data, children in value.items()
-            ]
-        elif hasattr(value, "__iter__") and not isinstance(value, str):
-            return [
-                self._create_node(parent=parent, data=item[0], children=item[1])
-                for item in value
-            ]
-        else:
-            return [self._create_node(parent=parent, data=value)]
+        match value:
+            case Mapping():
+                return [
+                    self._create_node(parent=parent, data=data, children=children)
+                    for data, children in value.items()
+                ]
+            case Iterable() if not isinstance(value, str):
+                return [
+                    self._create_node(parent=parent, data=item[0], children=item[1])
+                    for item in value
+                ]
+            case _:
+                return [self._create_node(parent=parent, data=value)]
 
     ######################################################################
     # Utility methods to make TreeSources more list-like
@@ -351,7 +375,7 @@ class TreeSource(Source):
         This search uses Node instances, and searches for an *instance* match.
         If two Node instances have the same values, only the Node that is the
         same Python instance will match. To search for values based on equality,
-        use :meth:`~toga.sources.TreeSource.find`.
+        use [`TreeSource.find()`][toga.sources.TreeSource.find].
 
         :param node: The node to find in the data source.
         :returns: The index of the node in the child list it is a part of.
@@ -366,13 +390,13 @@ class TreeSource(Source):
         This is a value based search, rather than an instance search. If two Node
         instances have the same values, the first instance that matches will be
         returned. To search for a second instance, provide the first found instance as
-        the ``start`` argument. To search for a specific Node instance, use the
-        :meth:`~toga.sources.TreeSource.index`.
+        the `start` argument. To search for a specific Node instance, use the
+        [`TreeSource.index()`][toga.sources.TreeSource.index].
 
         :param data: The data to search for. Only the values specified in data will be
             used as matching criteria; if the node contains additional data attributes,
             they won't be considered as part of the match.
-        :param start: The instance from which to start the search. Defaults to ``None``,
+        :param start: The instance from which to start the search. Defaults to `None`,
             indicating that the first match should be returned.
         :return: The matching Node object.
         :raises ValueError: If no match is found.
@@ -384,4 +408,5 @@ class TreeSource(Source):
             accessors=self._accessors,
             start=start,
             error=f"No root node matching {data!r} in {self}",
+            value_type="node",
         )

@@ -1,3 +1,5 @@
+import warnings
+
 from toga import NotImplementedWarning
 
 from . import dialogs
@@ -43,60 +45,61 @@ from .widgets.timeinput import TimeInput
 from .widgets.webview import WebView
 from .window import MainWindow, Window
 
+warnings.warn(
+    "Factory modules are deprecated. Use 'toga.platform.get_factory' instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-def not_implemented(feature):
+
+def not_implemented(feature):  # pragma: no cover
     NotImplementedWarning.warn("iOS", feature)
 
 
 __all__ = [
-    "not_implemented",
     "ActivityIndicator",
     "App",
-    "Command",
-    # Resources
-    "native_color",  # colors
-    "Font",
-    "Icon",
-    "Image",
-    "Paths",
-    "dialogs",
-    # Hardware
-    "Camera",
-    "Location",
-    # Status icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # Widgets
     "Box",
     "Button",
+    "Camera",
     "Canvas",
+    "Command",
     "DateInput",
     "DetailedList",
     "Divider",
+    "Font",
+    "Icon",
+    "Image",
     "ImageView",
     "Label",
+    "Location",
+    "MainWindow",
     "MapView",
+    "MenuStatusIcon",
     "MultilineTextInput",
     "NumberInput",
     "OptionContainer",
     "PasswordInput",
+    "Paths",
     "ProgressBar",
     "ScrollContainer",
     "Selection",
+    "SimpleStatusIcon",
     "Slider",
     # 'SplitContainer',
+    "StatusIconSet",
     "Switch",
     # 'Table',
     "TextInput",
     "TimeInput",
     # 'Tree',
     "WebView",
-    # Windows
-    "MainWindow",
     "Window",
+    "dialogs",
+    "native_color",  # colors
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's iOS backend doesn't implement {name}")

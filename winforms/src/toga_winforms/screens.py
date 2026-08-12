@@ -1,4 +1,5 @@
 from ctypes import wintypes
+from typing import ClassVar
 
 from System.Drawing import (
     Bitmap,
@@ -14,11 +15,12 @@ from toga.screens import Screen as ScreenInterface
 from toga.types import Position, Size
 
 from .libs import shcore, user32
+from .libs.win32constants import MONITOR_DEFAULTTONEAREST
 from .widgets.base import Scalable
 
 
 class Screen(Scalable):
-    _instances = {}
+    _instances: ClassVar[dict] = {}
 
     def __new__(cls, native):
         if native in cls._instances:
@@ -42,7 +44,7 @@ class Screen(Scalable):
             self.native.Bounds.Right,
             self.native.Bounds.Bottom,
         )
-        hMonitor = user32.MonitorFromRect(screen_rect, user32.MONITOR_DEFAULTTONEAREST)
+        hMonitor = user32.MonitorFromRect(screen_rect, MONITOR_DEFAULTTONEAREST)
         pScale = wintypes.UINT()
         shcore.GetScaleFactorForMonitor(hMonitor, pScale)
         return pScale.value / 100
@@ -69,11 +71,17 @@ class Screen(Scalable):
         return Size(self.scale_out(bounds.Width), self.scale_out(bounds.Height))
 
     def get_image_data(self):
-        bitmap = Bitmap(*self.get_size())
+        bitmap = Bitmap(
+            self.scale_in(self.get_size()[0]), self.scale_in(self.get_size()[1])
+        )
         graphics = Graphics.FromImage(bitmap)
-        source_point = Point(*self.get_origin())
+        source_point = Point(
+            self.scale_in(self.get_origin()[0]), self.scale_in(self.get_origin()[1])
+        )
         destination_point = Point(0, 0)
-        copy_size = WinSize(*self.get_size())
+        copy_size = WinSize(
+            self.scale_in(self.get_size()[0]), self.scale_in(self.get_size()[1])
+        )
         graphics.CopyFromScreen(source_point, destination_point, copy_size)
         stream = MemoryStream()
         bitmap.Save(stream, Imaging.ImageFormat.Png)

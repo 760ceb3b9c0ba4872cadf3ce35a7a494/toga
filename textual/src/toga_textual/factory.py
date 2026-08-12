@@ -1,3 +1,5 @@
+import warnings
+
 from toga import NotImplementedWarning
 
 from . import dialogs
@@ -40,54 +42,57 @@ from .widgets.textinput import TextInput
 # from .widgets.webview import WebView
 from .window import MainWindow, Window
 
+warnings.warn(
+    "Factory modules are deprecated. Use 'toga.platform.get_factory' instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-def not_implemented(feature):
+
+def not_implemented(feature):  # pragma: no cover
     NotImplementedWarning.warn("Textual", feature)  # pragma: nocover
 
 
 __all__ = [
-    "not_implemented",
-    "App",
-    "Command",
-    "Font",
-    "Icon",
-    # "Image",
-    "Paths",
-    "dialogs",
-    # Status Icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # # Widgets
     # "ActivityIndicator",
+    "App",
     "Box",
     "Button",
     # "Canvas",
+    "Command",
     # "DateInput",
     # "DetailedList",
     # "Divider",
+    "Font",
+    "Icon",
+    # "Image",
     # "ImageView",
     "Label",
+    "MainWindow",
+    "MenuStatusIcon",
     # "MultilineTextInput",
     # "NumberInput",
     # "OptionContainer",
     # "PasswordInput",
+    "Paths",
     # "ProgressBar",
     # "ScrollContainer",
     # "Selection",
+    "SimpleStatusIcon",
     # "Slider",
     # "SplitContainer",
+    "StatusIconSet",
     # "Switch",
     # "Table",
     "TextInput",
     # "TimeInput",
     # "Tree",
     # "WebView",
-    # Windows
-    "MainWindow",
     "Window",
+    "dialogs",
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's Textual backend doesn't implement {name}")

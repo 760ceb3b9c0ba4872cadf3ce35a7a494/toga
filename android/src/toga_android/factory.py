@@ -1,3 +1,5 @@
+import warnings
+
 from toga import NotImplementedWarning
 
 from . import dialogs
@@ -10,6 +12,7 @@ from .icons import Icon
 from .images import Image
 from .paths import Paths
 from .statusicons import MenuStatusIcon, SimpleStatusIcon, StatusIconSet
+from .widgets.activityindicator import ActivityIndicator
 from .widgets.box import Box
 from .widgets.button import Button
 from .widgets.canvas import Canvas
@@ -34,59 +37,60 @@ from .widgets.timeinput import TimeInput
 from .widgets.webview import WebView
 from .window import MainWindow, Window
 
+warnings.warn(
+    "Factory modules are deprecated. Use 'toga.platform.get_factory' instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-def not_implemented(feature):
+
+def not_implemented(feature):  # pragma: no cover
     NotImplementedWarning.warn("Android", feature)
 
 
 __all__ = [
+    "ActivityIndicator",
     "App",
-    "Command",
-    "not_implemented",
-    # Resources
-    "dialogs",
-    "Font",
-    "Icon",
-    "Image",
-    "Paths",
-    # Hardware
-    "Camera",
-    "Location",
-    # Status icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # Widgets
-    # ActivityIndicator
     "Box",
     "Button",
+    "Camera",
     "Canvas",
+    "Command",
     "DateInput",
     "DetailedList",
     "Divider",
+    "Font",
+    "Icon",
+    "Image",
     "ImageView",
     "Label",
+    "Location",
+    "MainWindow",
     "MapView",
+    "MenuStatusIcon",
     "MultilineTextInput",
     "NumberInput",
     "OptionContainer",
     "PasswordInput",
+    "Paths",
     "ProgressBar",
     "ScrollContainer",
-    # "SplitContainer",
     "Selection",
+    "SimpleStatusIcon",
     "Slider",
+    # "SplitContainer",
+    "StatusIconSet",
     "Switch",
     "Table",
     "TextInput",
     "TimeInput",
     # "Tree",
     "WebView",
-    # Windows
-    "MainWindow",
     "Window",
+    "dialogs",
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's Android backend doesn't implement {name}")

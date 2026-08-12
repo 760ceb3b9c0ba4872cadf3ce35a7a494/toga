@@ -8,6 +8,7 @@ from .base import SimpleProbe
 class ScrollContainerProbe(SimpleProbe):
     native_class = Gtk.ScrolledWindow
     scrollbar_inset = 0
+    frame_inset = 0
 
     if GTK_VERSION >= (4, 0, 0):
         pytest.skip("GTK4 doesn't support progress bars yet")
@@ -31,9 +32,6 @@ class ScrollContainerProbe(SimpleProbe):
         # Fake a vertical scroll
         self.native.get_vadjustment().set_value(200)
         self.native.get_vadjustment().emit("changed")
-
-    def repaint_needed(self):
-        return self.impl.document_container.needs_redraw or super().repaint_needed()
 
     async def wait_for_scroll_completion(self):
         # Scroll isn't animated, so this is a no-op.

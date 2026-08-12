@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 import toga
+import toga_dummy.window as dummy_window
 from toga.constants import WindowState
 from toga_dummy.utils import (
     EventLog,
@@ -41,6 +42,54 @@ def test_window_created(app):
     assert window.minimizable
     assert not hasattr(window, "toolbar")
     assert window.on_close._raw is None
+
+
+@pytest.mark.parametrize(
+    "event_name",
+    [
+        "on_close",
+        "on_gain_focus",
+        "on_lose_focus",
+        "on_show",
+        "on_hide",
+        "on_resize",
+    ],
+)
+def test_window_handler_attrs_initialized_before_impl(app, event_name, monkeypatch):
+    """Event handlers exist before the implementation is created."""
+    # Regression test for #4347 / #4357: Cocoa fires `windowDidResize_` and
+    # .NET Framework 4.x WinForms fires `Activated` *during* the platform
+    # constructor call. Both then dispatch into ``Window.on_resize`` /
+    # ``Window.on_gain_focus`` getters that read ``self._on_resize`` /
+    # ``self._on_gain_focus`` directly. If those attributes haven't been set
+    # yet, the callback raises ``AttributeError``. The fix is to install
+    # no-op defaults before constructing ``self._impl`` — this test pins
+    # that ordering by patching the dummy Window impl to invoke every
+    # interface event handler from inside its constructor and asserting
+    # none of them raise.
+    real_init = dummy_window.Window.__init__
+
+    def fire_callbacks_during_init(self, interface, title, position, size):
+        # Mimic Cocoa / .NET Framework: dispatch every relevant handler
+        # before the platform constructor returns. With the fix in place,
+        # each call invokes a wrapped no-op; without it, AttributeError
+        # bubbles out and __init__ aborts.
+        getattr(interface, event_name)()
+        real_init(self, interface, title, position, size)
+
+    monkeypatch.setattr(dummy_window.Window, "__init__", fire_callbacks_during_init)
+
+    # Should not raise. Without the pre-impl handler init this fails with
+    # AttributeError: 'Window' object has no attribute '_on_resize' (etc).
+    window = toga.Window()
+
+    handler = getattr(window, event_name)
+    assert callable(handler), f"window.{event_name} must be callable after __init__"
+    # Each default is a wrapped no-op handler with `_raw is None`.
+    assert handler._raw is None, (
+        f"window.{event_name} default must wrap a None handler "
+        f"(got _raw={handler._raw!r})"
+    )
 
 
 def test_window_created_explicit(app):
@@ -97,7 +146,7 @@ def test_window_created_without_app():
         toga.Window()
 
 
-def test_set_app(window, app):
+async def test_set_app(window, app):
     """A window's app cannot be reassigned."""
     assert window.app == app
 
@@ -435,6 +484,42 @@ def test_window_state(window, initial_state, final_state):
     window.on_show = Mock()
     window.on_hide = Mock()
     assert window.state == WindowState.NORMAL
+    window_on_resize_handler = Mock()
+    window.on_resize = window_on_resize_handler
+
+    closure_exception = None
+
+    def check_initial_state_size(window):
+        nonlocal closure_exception
+        try:
+            assert window.size > previous_state_window_size
+        except Exception as e:
+            closure_exception = e
+
+    def check_final_state_size(window):
+        nonlocal closure_exception
+        try:
+            match initial_state, final_state:
+                case WindowState.NORMAL, _:
+                    assert window.size > previous_state_window_size
+
+                case WindowState.MAXIMIZED, WindowState.NORMAL:
+                    assert window.size < previous_state_window_size
+                case WindowState.MAXIMIZED, _:
+                    assert window.size > previous_state_window_size
+
+                case WindowState.FULLSCREEN, WindowState.NORMAL | WindowState.MAXIMIZED:
+                    assert window.size < previous_state_window_size
+                case WindowState.FULLSCREEN, _:
+                    assert window.size > previous_state_window_size
+
+                case WindowState.PRESENTATION, _:
+                    assert window.size < previous_state_window_size
+        except Exception as e:
+            closure_exception = e
+
+    previous_state_window_size = window.size
+    window_on_resize_handler.side_effect = check_initial_state_size
 
     window.state = initial_state
     assert window.state == initial_state
@@ -448,6 +533,9 @@ def test_window_state(window, initial_state, final_state):
             f"set window state to {initial_state}",
             state=initial_state,
         )
+    # Check and raise exceptions that may have occurred inside closures.
+    if closure_exception:
+        raise closure_exception
 
     # Check for visibility event notification
     if initial_state == WindowState.MINIMIZED:
@@ -460,6 +548,9 @@ def test_window_state(window, initial_state, final_state):
         # was set to a visible-to-user(not minimized) state.
         assert_window_on_show(window, trigger_expected=False)
 
+    previous_state_window_size = window.size
+    window_on_resize_handler.side_effect = check_final_state_size
+
     window.state = final_state
     assert window.state == final_state
     assert_action_performed_with(
@@ -467,6 +558,9 @@ def test_window_state(window, initial_state, final_state):
         f"set window state to {final_state}",
         state=final_state,
     )
+    # Check and raise exceptions that may have occurred inside closures.
+    if closure_exception:
+        raise closure_exception
 
     # Check for visibility event notification
     if initial_state == WindowState.MINIMIZED:
@@ -767,6 +861,34 @@ def test_visibility_events(window):
 
     window.show()
     assert_window_on_show(window)
+
+
+def test_resize_event(window):
+    """The on_resize() event handler is triggered when the window size is changed."""
+    window.show()
+    assert window.on_resize._raw is None
+    window_on_resize_handler = Mock()
+    window.on_resize = window_on_resize_handler
+    assert window.on_resize._raw == window_on_resize_handler
+    initial_size = window.size
+
+    # Resize the window, on_resize() will be triggered
+    window.size = (200, 150)
+    assert window.size == (200, 150)
+    window_on_resize_handler.assert_called_with(window)
+    window_on_resize_handler.reset_mock()
+
+    # Resize to initial size, on_resize() will be triggered
+    window.size = initial_size
+    assert window.size == initial_size
+    window_on_resize_handler.assert_called_with(window)
+    window_on_resize_handler.reset_mock()
+
+    # Again request for resizing to initial size, on_resize()
+    # will not be triggered
+    window.size = initial_size
+    assert window.size == initial_size
+    window_on_resize_handler.assert_not_called()
 
 
 def test_as_image(window):

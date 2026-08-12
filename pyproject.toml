@@ -28,7 +28,6 @@ precision = 1
 exclude_lines = [
     "pragma: no cover",
     "@(abc\\.)?abstractmethod",
-    "NotImplementedError\\(\\)",
     "if TYPE_CHECKING:",
     "class .+?\\(Protocol.*\\):",
     "@overload",
@@ -39,10 +38,10 @@ exclude_lines = [
 no-cover-if-missing-setuptools_scm = "not is_installed('setuptools_scm')"
 no-cover-if-missing-PIL = "not is_installed('PIL')"
 no-cover-if-PIL-installed = "is_installed('PIL')"
+no-cover-if-lt-py312 = "sys_version_info < (3, 12) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
+no-cover-if-gte-py312 = "sys_version_info > (3, 12) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
 no-cover-if-lt-py311 = "sys_version_info < (3, 11) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
 no-cover-if-gte-py311 = "sys_version_info > (3, 11) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
-no-cover-if-lt-py310 = "sys_version_info < (3, 10) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
-no-cover-if-gte-py310 = "sys_version_info > (3, 10) and os_environ.get('COVERAGE_EXCLUDE_PYTHON_VERSION') != 'disable'"
 
 [tool.ruff]
 exclude = [
@@ -58,7 +57,6 @@ extend-select = [
     "F",      # pyflakes
     "UP",     # pyupgrade
     "B",      # flake8-bugbear
-    "YTT",    # flake8-2020
     "ASYNC",  # flake8-async
     "C4",     # flake8-comprehensions
     "I",      # isort
@@ -67,13 +65,48 @@ extend-select = [
     # use improvement.
     # "SIM",    # flake8-simplify
 ]
+# Ignores needed to pass the Ruff 0.16 update.
+ignore = [
+    "BLE001",
+    "DTZ001",
+    "DTZ005",
+    "DTZ006",
+    "DTZ011",
+    "DTZ012",
+    "RUF009",
+    # The SIM rules are *very* opinionated, and don't necessarily make for better code.
+    "SIM102",  # collapsible-if makes code (and testing paths) harder to verify.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# PEP8 module naming conventions aren't appropriate
+"examples/customwidget/helloworld/src/hello_world_widget/iOS_hello_world.py" = ["N999"]
+"iOS/src/toga_iOS/__init__.py" = ["N999"]
+"iOS/src/toga_iOS/hardware/__init__.py" = ["N999"]
+"iOS/src/toga_iOS/resources/__init__.py" = ["N999"]
+"iOS/src/toga_iOS/widgets/__init__.py" = ["N999"]
+# Ignores needed to pass the Ruff 0.16 update.
+"core/src/toga/sources/base.py" = ["PLC0105"]
+"core/src/toga/window.py" = ["PLC0105"]
+"core/tests/command/test_command.py" = ["PLR0124"]
+"core/tests/command/test_group.py" = ["PLR0124"]
+"core/tests/style/pack/test_aliases.py" = ["PT010"]
+"core/tests/style/pack/test_deprecated_properties.py" = ["PT031"]
+"core/src/toga/widgets/dateinput.py" = ["PLR1730"]
+"core/src/toga/widgets/timeinput.py" = ["PLR1730"]
+"core/tests/test_platform.py" = ["PT031"]
+"cocoa/src/toga_cocoa/widgets/internal/refresh.py" = ["PLW0642"]
+"examples/*" = ["RUF012"]
+"iOS/tests_backend/widgets/scrollcontainer.py" = ["RUF018"]
+"testbed/tests/widgets/test_optioncontainer.py" = ["PT031"]
+"winforms/src/toga_winforms/libs/win32structures.py" = ["RUF012"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-third-party = [
     "android",  # isort defaults to making this first-party because it can't be imported.
     "textual",  # We don't ever import textual, so Ruff doesn't know about it.
-    "travertino", # In this repo, but still a separate package
+    "travertino",  # In this repo, but still a separate package
 ]
 known-first-party = [
     "testbed",
@@ -88,14 +121,49 @@ known-first-party = [
     "toga_winforms",
 ]
 
+[tool.rumdl]
+flavor = "mkdocs"
+include = ["**/*.md"]
+exclude = ["changes/template.md", "comment.md", "CODE_OF_CONDUCT.md", "docs/en/SUMMARY.md"]
+respect-gitignore = true
+force-exclude = true
+
+# Disable rules:
+# MD014: Forces commands in codeblocks to show output
+# MD042: Empty link - buggy, still flagging on valid MkDocs formatting
+# MD052: Reference link not found - buggy, flagging on valis MkDocs links
+disable = ["MD014", "MD042", "MD052"]
+
+[tool.rumdl.per-file-ignores]
+"changes/**/*.md" = ["MD041"]
+"docs/en/reference/api/**/*.md" = ["MD041"]
+"docs/en/snippets/**/*.md" = ["MD041"]
+
+[tool.rumdl.MD007]
+indent = 4
+
+[tool.rumdl.MD013]  # Line length
+line_length = 999999  # Force reflow to paragraph content to remove linebreaks
+reflow = true
+reflow_mode = "normalize"
+
+[tool.rumdl.MD026]  # Remove punctuation at the end of headings
+punctuation = ",;:"
+
+[tool.rumdl.MD033]  # No inline HTML
+allowed_elements = ["nospell",]  # pyspelling inline disable tag
+
+[tool.rumdl.MD046]
+style = "fenced"
+
 [tool.towncrier]
 directory = "changes"
 package = "toga"
 package_dir = "core/src"
-filename = "docs/about/releases.rst"
-title_format = "{version} ({project_date})"
-issue_format = "`#{issue} <https://github.com/beeware/toga/issues/{issue}>`__"
-template = "changes/template.rst"
+filename = "docs/en/about/releases.md"
+title_format = "## {version} ({project_date})"
+issue_format = "[#{issue}](https://github.com/beeware/toga/issues/{issue})"
+template = "changes/template.md"
 type = [
     { directory = "feature", name = "Features", showcontent = true },
     { directory = "bugfix", name = "Bugfixes", showcontent = true },
@@ -108,3 +176,38 @@ type = [
 # We're not doing anything Python-related at the root level of the repo, but if this
 # declaration isn't here, tox commands run from the root directory raise a warning that
 # pyproject.toml doesn't contain a setuptools_scm section.
+
+[dependency-groups]
+# Extras used by developers *of* Toga are pinned to specific versions to
+# ensure environment consistency.
+pre-commit = [
+    "pre-commit == 4.6.1",
+]
+
+setuptools-scm = [
+    "setuptools_scm == 10.2.1",
+]
+
+towncrier = [
+    "towncrier==25.8.0",
+]
+
+tox-uv = [
+    "tox-uv == 1.36.0",
+]
+
+dev = [
+    {include-group = "pre-commit"},
+    {include-group = "tox-uv"},
+    {include-group = "setuptools-scm"}
+]
+
+# Docs are always built on a specific Python version; see RTD and tox config files,
+# and the docs contribution guide.
+docs = [
+    "beeware-docs-tools @ git+https://github.com/beeware/beeware-docs-tools",
+    # "beeware-docs-tools @ file://../beeware-docs-tools",
+    "tabulate==0.10.0",
+    "mkdocs-redirects==1.2.3",
+    "mkdocs-exclude==1.0.2",
+]

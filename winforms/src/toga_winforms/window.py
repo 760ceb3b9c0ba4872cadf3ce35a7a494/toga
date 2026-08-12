@@ -1,20 +1,38 @@
 from __future__ import annotations
 
+import ctypes
+from ctypes import POINTER, cast
+from ctypes.wintypes import HWND, LPARAM, RECT, UINT, WPARAM
 from typing import TYPE_CHECKING
 
 import System.Windows.Forms as WinForms
-from System.Drawing import Bitmap, Font as WinFont, Graphics, Point, Size as WinSize
+from System.Drawing import (
+    Bitmap,
+    Font as WinFont,
+    Graphics,
+    GraphicsUnit,
+    Point,
+    Size as WinSize,
+)
 from System.Drawing.Imaging import ImageFormat
 from System.IO import MemoryStream
 
 from toga import App
 from toga.command import Separator
 from toga.constants import WindowState
+from toga.handlers import WeakrefCallable
 from toga.types import Position, Size
 
 from .container import Container
 from .fonts import DEFAULT_FONT
-from .libs.wrapper import WeakrefCallable
+from .libs import win32constants as wc, win32structures as ws
+from .libs.comctl32 import DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass
+from .libs.user32 import (
+    AdjustWindowRectExForDpi,
+    GetDpiForWindow,
+    GetWindowLongW,
+    SetWindowPos,
+)
 from .screens import Screen as ScreenImpl
 from .widgets.base import Scalable
 
@@ -22,13 +40,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from toga.types import PositionT, SizeT
 
 
-# It looks like something is caching the initial scale of the primary screen, and
-# scaling all font sizes by it. Experiments show that this cache is at the level of the
-# app, not the window.
-initial_dpi_scale = ScreenImpl(WinForms.Screen.PrimaryScreen).dpi_scale
-
-
-class Window(Container, Scalable):
+class Window(Scalable):
     def __init__(self, interface, title, position, size):
         self.interface = interface
 
@@ -36,18 +48,25 @@ class Window(Container, Scalable):
 
         self._FormClosing_handler = WeakrefCallable(self.winforms_FormClosing)
         self.native.FormClosing += self._FormClosing_handler
-        super().__init__(self.native)
-        self._dpi_scale = self.get_current_screen().dpi_scale
+        self.container = Container(self.native, self.on_refresh)
+        self._dpi_scale = GetDpiForWindow(int(self.native.Handle.ToString())) / 96
 
         self.native.MinimizeBox = self.interface.minimizable
         self.native.MaximizeBox = self.interface.resizable
 
-        # Use a shadow variable since a window without any app menu and toolbar
-        # in presentation mode would be indistinguishable from full screen mode.
+        # Use a shadow variable since a window without any app menu and toolbar in
+        # presentation mode would be indistinguishable from full screen mode.
         self._in_presentation_mode = False
-        # Required to detect if the window has been un-minimized, and to prevent
-        # double triggering of visibility events.
+        # Required to detect if the window has been un-minimized, and to prevent double
+        # triggering of visibility events.
         self._previous_state = WindowState.NORMAL
+        # On minimization, winforms returns window size as 0 x 0, but this behavior is
+        # inconsistent with other platforms as minimization does not constitute a window
+        # resize operation. Therefore, it should return the same size as before
+        # minimization. Under .NET Core, there's also issues with correctly restoring
+        # the window size when coming back from FULLSCREEN or PRESENTATION mode. This
+        # variable stores the window size so it can be returned/restored as required.
+        self._cached_window_size = None
 
         self.set_title(title)
         self.set_size(size)
@@ -56,7 +75,6 @@ class Window(Container, Scalable):
         if position:
             self.set_position(position)
 
-        self.native.LocationChanged += WeakrefCallable(self.winforms_LocationChanged)
         self.native.Resize += WeakrefCallable(self.winforms_Resize)
         self.resize_content()  # Store initial size
 
@@ -71,8 +89,91 @@ class Window(Container, Scalable):
         self.native.VisibleChanged += WeakrefCallable(self.winforms_VisibleChanged)
         self.native.SizeChanged += WeakrefCallable(self.winforms_SizeChanged)
 
+        # By default, AutoScaleMode is set to Inherit which is None for top-level forms,
+        # but explicit is better than implicit (tm)...
+        self.native.AutoScaleMode = getattr(WinForms.AutoScaleMode, "None")
+
     def create(self):
         self.native = WinForms.Form()
+        self.pfn_subclass = ws.SUBCLASSPROC(self._subclass_proc)
+        self.native.HandleCreated += WeakrefCallable(self.winforms_handle_created)
+        self.native.HandleDestroyed += WeakrefCallable(self.winforms_handle_destroyed)
+        self._set_subclass()
+
+    def _set_subclass(self):
+        SetWindowSubclass(int(self.native.Handle.ToString()), self.pfn_subclass, 0, 0)
+
+    def _remove_subclass(self):
+        RemoveWindowSubclass(int(self.native.Handle.ToString()), self.pfn_subclass, 0)
+
+    def _subclass_proc(
+        self,
+        hWnd: int,
+        uMsg: int,
+        wParam: int,
+        lParam: int,
+        uIdSubclass: int,
+        dwRefData: int,
+    ) -> ws.LRESULT:
+        # Remove the window subclass in the way recommended by Raymond Chen here:
+        # https://devblogs.microsoft.com/oldnewthing/20031111-00/?p=41883
+        # This doesn't seem to be fired in case of top-level Toga windows, but it's kept
+        # for consistency and reliability.  Thus the no-cover.
+        if uMsg == wc.WM_NCDESTROY:  # pragma: no cover
+            RemoveWindowSubclass(hWnd, self.pfn_subclass, uIdSubclass)
+
+        if uMsg == wc.WM_DPICHANGED:
+            rect = cast(lParam, POINTER(RECT)).contents
+            new_dpi_scale = (wParam & 0xFFFF) / 96
+
+            # Suspended and resumed to optimize performance by a little while we do
+            # our bookkeeping; this is mostly relevant when there are toolbars and
+            # menubars, where without these 2 the layout of the top bars will slowly
+            # change and appear unpleasant on slow systems.
+            self.native.SuspendLayout()
+
+            # The following needs to be done before SetWindowPos, as SetWindowPos
+            # will trigger winforms_Resize which will use the new DPI parameters.
+            self._dpi_scale = new_dpi_scale
+            self.update_fonts()
+
+            # Putting ResumeLayout here makes sure that the container size actually
+            # changes and a refresh is forced when we do SetWindowPos.
+            self.native.ResumeLayout()
+
+            # Set MinimumSize to 0 temporarily, so the window size setting is not
+            # immediately rejected if moving to a smaller DPI screen.
+            self.native.MinimumSize = WinSize(0, 0)
+            SetWindowPos(
+                hWnd,
+                0,
+                rect.left,
+                rect.top,
+                rect.right - rect.left,
+                rect.bottom - rect.top,
+                wc.SWP_NOZORDER,
+            )
+
+            # Window position setting should force a resize, but do this defensively
+            self.resize_content(force_refresh=True)
+            return 0
+
+        # In tests, we only mock WM_DPICHANGED; but since this is just "let Windows do"
+        # its thing, we can safely no-cover it.
+        if uMsg == wc.WM_GETDPISCALEDSIZE:  # pragma: no cover
+            # .NET Core overrides this behavior when not using AutoScaleMode.Dpi,
+            # which includes AutoScaleMode.None, which we use.
+            # We thus override this again, returning 0 to always let the system
+            # handle this message.
+            return 0
+
+        return DefSubclassProc(HWND(hWnd), UINT(uMsg), WPARAM(wParam), LPARAM(lParam))
+
+    def winforms_handle_created(self, sender, event):
+        self._set_subclass()
+
+    def winforms_handle_destroyed(self, sender, event):
+        self._remove_subclass()
 
     # We cache the scale to make sure that it only changes inside update_dpi.
     @property
@@ -82,8 +183,9 @@ class Window(Container, Scalable):
     def scale_font(self, native_font):
         return WinFont(
             native_font.FontFamily,
-            native_font.Size * (self.dpi_scale / initial_dpi_scale),
+            native_font.Size * self.dpi_scale,
             native_font.Style,
+            GraphicsUnit.Pixel,
         )
 
     ######################################################################
@@ -91,35 +193,32 @@ class Window(Container, Scalable):
     ######################################################################
 
     def winforms_Resize(self, sender, event):
-        if self.native.WindowState != WinForms.FormWindowState.Minimized:
+        if (self.get_window_state() != WindowState.MINIMIZED) and (
+            {self._previous_state, self.get_window_state()}
+            != {WindowState.NORMAL, WindowState.MINIMIZED}
+        ):
+            # State change between NORMAL <-> MINIMIZED doesn't
+            # constitute a window resize operation.
+            self.interface.on_resize()
             self.resize_content()
 
-        # See DisplaySettingsChanged in app.py.
-        if self.get_current_screen().dpi_scale != self._dpi_scale:
-            self.update_dpi()
-
     def winforms_FormClosing(self, sender, event):
-        # If the app is exiting, do nothing; we've already approved the exit
-        # (and thus the window close). This branch can't be triggered in test
-        # conditions, so it's marked no-branch.
+        # If the app is exiting, do nothing; we've already approved the exit(and thus
+        # the window close). This branch can't be triggered in test conditions, so it's
+        # marked no-branch.
         #
-        # Otherwise, handle the close request by always cancelling the event,
-        # and invoking `on_close()` handling. This will evaluate whether a close
-        # is allowed, and if it is, programmatically invoke close on the window,
-        # removing this handler first so that the close will complete.
+        # Otherwise, handle the close request by always cancelling the event, and
+        # invoking `on_close()` handling. This will evaluate whether a close is
+        # allowed, and if it is, programmatically invoke close on the window, removing
+        # this handler first so that the close will complete.
         #
-        # Winforms doesn't provide a way to disable/hide the close button, so if
-        # the window is non-closable, don't trigger on_close handling - just
-        # cancel the close event.
+        # Winforms doesn't provide a way to disable/hide the close button, so if the
+        # window is non-closable, don't trigger on_close handling - just cancel the
+        # close event.
         if not self.interface.app._impl._is_exiting:  # pragma: no branch
             if self.interface.closable:
                 self.interface.on_close()
             event.Cancel = True
-
-    def winforms_LocationChanged(self, sender, event):
-        # See DisplaySettingsChanged in app.py.
-        if self.get_current_screen().dpi_scale != self._dpi_scale:
-            self.update_dpi()
 
     def winforms_Activated(self, sender, event):
         self.interface.on_gain_focus()
@@ -165,9 +264,11 @@ class Window(Container, Scalable):
         self.native.Icon = icon_impl.native
 
     def show(self):
+        self._dpi_scale = GetDpiForWindow(int(self.native.Handle.ToString())) / 96
+        self.update_fonts()
         if self.interface.content is not None:
             self.interface.content.refresh()
-        self.update_dpi()
+        self.resize_content()
         self.native.Show()
 
     ######################################################################
@@ -177,17 +278,39 @@ class Window(Container, Scalable):
     # "Decor" includes the title bar and the (usually invisible) resize borders. It does
     # not include the menu bar and toolbar, which are included in the ClientSize (see
     # _top_bars_height).
+    def _window_frame_size(self, dpi):
+        hwnd = HWND(int(self.native.Handle.ToString()))
+
+        style = GetWindowLongW(hwnd, wc.GWL_STYLE)
+        ex_style = GetWindowLongW(hwnd, wc.GWL_EXSTYLE)
+
+        rect = RECT(0, 0, 0, 0)
+
+        AdjustWindowRectExForDpi(
+            ctypes.byref(rect),
+            style,
+            False,
+            ex_style,
+            int(dpi),
+        )
+
+        return (
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+        )
+
     def _decor_width(self):
-        return self.native.Size.Width - self.native.ClientSize.Width
+        width, _ = self._window_frame_size(self.dpi_scale * 96)
+        return width
 
     def _decor_height(self):
-        return self.native.Size.Height - self.native.ClientSize.Height
+        _, height = self._window_frame_size(self.dpi_scale * 96)
+        return height
 
     def _top_bars_height(self):
         return 0
 
-    def refreshed(self):
-        super().refreshed()
+    def on_refresh(self, container):
         layout = self.interface.content.layout
         self.native.MinimumSize = WinSize(
             self.scale_in(layout.min_width) + self._decor_width(),
@@ -196,27 +319,23 @@ class Window(Container, Scalable):
             + self._decor_height(),
         )
 
-    def resize_content(self):
+    def resize_content(self, force_refresh=False):
         vertical_shift = self._top_bars_height()
-        self.native_content.Location = Point(0, vertical_shift)
-        super().resize_content(
+        self.container.native_content.Location = Point(0, vertical_shift)
+        self.container.resize_content(
             self.native.ClientSize.Width,
             self.native.ClientSize.Height - vertical_shift,
+            force_refresh=force_refresh,
         )
 
-    def update_dpi(self):
-        self._dpi_scale = self.get_current_screen().dpi_scale
-
+    def update_fonts(self):
         # Update all the native fonts and determine the new preferred sizes.
         for widget in self.interface.widgets:
             widget._impl.scale_font()
             widget._impl.refresh()
 
-        # Then do a single layout pass.
-        if self.interface.content is not None:
-            self.interface.content.refresh()
-
-        self.resize_content()
+    def set_content(self, widget):
+        self.container.set_content(widget)
 
     ######################################################################
     # Window size
@@ -225,6 +344,9 @@ class Window(Container, Scalable):
     # Window.size is scaled according to the DPI of the current screen, to be consistent
     # with the scaling of its content.
     def get_size(self) -> Size:
+        if self.interface.state == WindowState.MINIMIZED:
+            return self._cached_window_size
+
         size = self.native.Size
         return Size(
             self.scale_out(size.Width - self._decor_width()),
@@ -274,26 +396,30 @@ class Window(Container, Scalable):
     ######################################################################
 
     def get_window_state(self, in_progress_state=False):
-        window_state = self.native.WindowState
-        if window_state == WinForms.FormWindowState.Maximized:
-            if self.native.FormBorderStyle == getattr(WinForms.FormBorderStyle, "None"):
-                if self._in_presentation_mode:
-                    return WindowState.PRESENTATION
+        match self.native.WindowState:
+            case WinForms.FormWindowState.Maximized:
+                if self.native.FormBorderStyle == getattr(
+                    WinForms.FormBorderStyle, "None"
+                ):
+                    if self._in_presentation_mode:
+                        return WindowState.PRESENTATION
+                    else:
+                        return WindowState.FULLSCREEN
                 else:
-                    return WindowState.FULLSCREEN
-            else:
-                return WindowState.MAXIMIZED
-        elif window_state == WinForms.FormWindowState.Minimized:
-            return WindowState.MINIMIZED
-        else:  # window_state == WinForms.FormWindowState.Normal:
-            return WindowState.NORMAL
+                    return WindowState.MAXIMIZED
+            case WinForms.FormWindowState.Minimized:
+                return WindowState.MINIMIZED
+            case _:  # WinForms.FormWindowState.Normal
+                return WindowState.NORMAL
 
     def set_window_state(self, state):
-        # If the app is in presentation mode, but this window isn't, then
-        # exit app presentation mode before setting the requested state.
-        if any(
-            window.state == WindowState.PRESENTATION and window != self.interface
+        # If the app is in presentation mode, but this window isn't, then exit app
+        # presentation mode before setting the requested state — unless we're
+        # entering presentation mode ourselves (to allow multiple windows).
+        if state != WindowState.PRESENTATION and any(
+            window.state == WindowState.PRESENTATION
             for window in self.interface.app.windows
+            if window != self.interface
         ):
             self.interface.app.exit_presentation_mode()
 
@@ -301,38 +427,32 @@ class Window(Container, Scalable):
         if current_state == state:
             return
 
-        elif current_state != WindowState.NORMAL:
-            if current_state == WindowState.PRESENTATION:
-                if self.native.MainMenuStrip:
-                    self.native.MainMenuStrip.Visible = True
-                if getattr(self, "toolbar_native", None):
-                    self.toolbar_native.Visible = True
-
-                self.interface.screen = self._before_presentation_mode_screen
-                del self._before_presentation_mode_screen
-                self._in_presentation_mode = False
-
-            self.native.FormBorderStyle = getattr(
-                WinForms.FormBorderStyle,
-                "Sizable" if self.interface.resizable else "FixedSingle",
-            )
-            self.native.WindowState = WinForms.FormWindowState.Normal
-
-            self.set_window_state(state)
-
-        else:  # current_state == WindowState.NORMAL:
-            if state == WindowState.MAXIMIZED:
+        match current_state, state:
+            case WindowState.NORMAL, WindowState.MAXIMIZED:
                 self.native.WindowState = WinForms.FormWindowState.Maximized
 
-            elif state == WindowState.MINIMIZED:
+            case WindowState.NORMAL, WindowState.MINIMIZED:
+                # On minimization, winforms reports window size as 0 x 0, hence cache
+                # the previous window size to make the API behavior uniform on all
+                # platforms.
+                self._cached_window_size = self.interface.size
                 self.native.WindowState = WinForms.FormWindowState.Minimized
 
-            elif state == WindowState.FULLSCREEN:
+            case WindowState.NORMAL, WindowState.FULLSCREEN:
+                # .NET Core doesn't always restore the window size coming back from
+                # FULLSCREEN mode. Save the window size to make sure it is restored.
+                self._cached_window_size = self.interface.size
+
                 self.native.FormBorderStyle = getattr(WinForms.FormBorderStyle, "None")
                 self.native.WindowState = WinForms.FormWindowState.Maximized
 
-            else:  # state == WindowState.PRESENTATION:
+            case WindowState.NORMAL, WindowState.PRESENTATION:
+                # .NET Core doesn't always restore the window size coming back from
+                # PRESENTATION mode. Save the window size and screen to make sure it is
+                # restored.
                 self._before_presentation_mode_screen = self.interface.screen
+                self._cached_window_size = self.interface.size
+
                 if self.native.MainMenuStrip:
                     self.native.MainMenuStrip.Visible = False
                 if getattr(self, "toolbar_native", None):
@@ -341,17 +461,46 @@ class Window(Container, Scalable):
                 self.native.WindowState = WinForms.FormWindowState.Maximized
                 self._in_presentation_mode = True
 
+            case _:
+                # All transitions that *aren't* leaving normal, with an extra bit if
+                # we're leaving presentation.
+                if current_state == WindowState.PRESENTATION:
+                    if self.native.MainMenuStrip:
+                        self.native.MainMenuStrip.Visible = True
+                    if getattr(self, "toolbar_native", None):
+                        self.toolbar_native.Visible = True
+
+                    self.interface.screen = self._before_presentation_mode_screen
+                    del self._before_presentation_mode_screen
+                    self._in_presentation_mode = False
+
+                self.native.FormBorderStyle = getattr(
+                    WinForms.FormBorderStyle,
+                    "Sizable" if self.interface.resizable else "FixedSingle",
+                )
+                self.native.WindowState = WinForms.FormWindowState.Normal
+                self.set_window_state(state)
+
+                # If there was a cached window size, restore that size.
+                # Required for .NET Core restoration of FULLSCREEN/PRESENTATION.
+                if self._cached_window_size:
+                    self.set_size(self._cached_window_size)
+                    self._cached_window_size = None
+
     ######################################################################
     # Window capabilities
     ######################################################################
 
     def get_image_data(self):
-        size = WinSize(self.native_content.Size.Width, self.native_content.Size.Height)
+        size = WinSize(
+            self.container.native_content.Size.Width,
+            self.container.native_content.Size.Height,
+        )
         bitmap = Bitmap(size.Width, size.Height)
         graphics = Graphics.FromImage(bitmap)
 
         graphics.CopyFromScreen(
-            self.native_content.PointToScreen(Point.Empty),
+            self.container.native_content.PointToScreen(Point.Empty),
             Point(0, 0),
             size,
         )
@@ -366,13 +515,13 @@ class MainWindow(Window):
         super().create()
         self.toolbar_native = None
 
-    def update_dpi(self):
-        super().update_dpi()
+    def update_fonts(self):
+        # Update all the native fonts and determine the new preferred sizes.
         if self.native.MainMenuStrip:  # pragma: no branch
             self.native.MainMenuStrip.Font = self.scale_font(DEFAULT_FONT)
         if self.toolbar_native:
             self.toolbar_native.Font = self.scale_font(DEFAULT_FONT)
-        self.resize_content()
+        super().update_fonts()
 
     def _top_bars_height(self):
         vertical_shift = 0

@@ -7,6 +7,7 @@ import toga
 from toga.colors import CORNFLOWERBLUE, REBECCAPURPLE, TRANSPARENT
 from toga.style.pack import COLUMN, ROW, Pack
 
+from ..conftest import skip_on_backends
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
     test_background_color,
@@ -15,6 +16,12 @@ from .properties import (  # noqa: F401
     test_enable_noop,
     test_flex_widget_size,
     test_focus_noop,
+)
+
+skip_on_backends(
+    "toga_textual",
+    reason="ScrollContainer is not implemented on Textual.",
+    allow_module_level=True,
 )
 
 
@@ -77,13 +84,14 @@ test_cleanup = build_cleanup_test(
     # Pass a function here to prevent init of toga.Box() in a different thread than
     # toga.ScrollContainer. This would raise a runtime error on Windows.
     lambda: toga.ScrollContainer(content=toga.Box()),
-    xfail_platforms=("android", "linux"),
 )
 
 
 async def test_clear_content(widget, probe, small_content):
     "Widget content can be cleared and reset"
-    assert probe.document_width == probe.width - probe.scrollbar_inset
+    assert probe.document_width == approx(
+        probe.width - probe.scrollbar_inset - probe.frame_inset, abs=1
+    )
     assert probe.document_height == approx(6000, abs=1)
 
     widget.content = None
@@ -103,8 +111,8 @@ async def test_clear_content(widget, probe, small_content):
     widget.content = small_content
     await probe.redraw("Widget content has been restored")
     assert probe.has_content
-    assert probe.document_width == probe.width
-    assert probe.document_height == probe.height
+    assert probe.document_width == probe.width - probe.frame_inset
+    assert probe.document_height == probe.height - probe.frame_inset
 
 
 async def test_margin(widget, probe, content):
@@ -265,13 +273,15 @@ async def test_enable_vertical_scrolling(widget, probe, content, on_scroll):
 
 async def test_vertical_scroll(widget, probe, on_scroll):
     "The widget can be scrolled vertically."
-    assert probe.document_width == probe.width - probe.scrollbar_inset
-    assert probe.document_height > probe.height
+    assert probe.document_width == approx(
+        probe.width - probe.scrollbar_inset - probe.frame_inset, abs=1
+    )
+    assert probe.document_height > probe.height - probe.frame_inset
     assert probe.document_height == approx(6000, abs=1)
 
     assert widget.max_horizontal_position == 0
     assert widget.max_vertical_position == approx(
-        probe.document_height - probe.height, abs=1
+        probe.document_height - probe.height + probe.frame_inset, abs=1
     )
     assert isinstance(widget.max_vertical_position, int)
 
@@ -315,8 +325,8 @@ async def test_vertical_scroll_small_content(widget, probe, small_content):
     widget.content = small_content
     await probe.redraw("Content has been switched for a small document")
 
-    assert probe.document_width == probe.width
-    assert probe.document_height == probe.height
+    assert probe.document_width == probe.width - probe.frame_inset
+    assert probe.document_height == probe.height - probe.frame_inset
 
     assert widget.max_horizontal_position == 0
     assert widget.max_vertical_position == 0
@@ -338,10 +348,12 @@ async def test_horizontal_scroll(widget, probe, content, on_scroll):
 
     assert probe.document_width > probe.width
     assert probe.document_width == approx(20000, abs=1)
-    assert probe.document_height == probe.height - probe.scrollbar_inset
+    assert probe.document_height == approx(
+        probe.height - probe.scrollbar_inset - probe.frame_inset, abs=1
+    )
 
     assert widget.max_horizontal_position == approx(
-        probe.document_width - probe.width, abs=1
+        probe.document_width - probe.width + probe.frame_inset, abs=1
     )
     assert isinstance(widget.max_horizontal_position, int)
     assert widget.max_vertical_position == 0
@@ -387,8 +399,8 @@ async def test_horizontal_scroll_small_content(widget, probe, small_content):
     widget.content = small_content
     await probe.redraw("Content has been switched for a small wide document")
 
-    assert probe.document_width == probe.width
-    assert probe.document_height == probe.height
+    assert probe.document_width == probe.width - probe.frame_inset
+    assert probe.document_height == probe.height - probe.frame_inset
 
     assert widget.max_horizontal_position == 0
     assert widget.max_vertical_position == 0

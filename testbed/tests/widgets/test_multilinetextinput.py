@@ -1,8 +1,11 @@
+import asyncio
+
 import pytest
 
 import toga
 from toga.style import Pack
 
+from ..conftest import skip_on_backends
 from .conftest import build_cleanup_test
 from .properties import (  # noqa: F401
     test_background_color,
@@ -34,6 +37,12 @@ from .test_textinput import (  # noqa: F401
     test_value_not_hidden,
 )
 
+skip_on_backends(
+    "toga_textual",
+    reason="MultilineTextInput is not implemented on Textual.",
+    allow_module_level=True,
+)
+
 
 @pytest.fixture
 async def widget():
@@ -46,9 +55,7 @@ def verify_font_sizes():
     return False, False
 
 
-test_cleanup = build_cleanup_test(
-    toga.MultilineTextInput, xfail_platforms=("android", "linux")
-)
+test_cleanup = build_cleanup_test(toga.MultilineTextInput)
 
 
 async def test_scroll_position(widget, probe):
@@ -92,6 +99,14 @@ async def test_scroll_position(widget, probe):
     scroll_offset = probe.document_height - probe.height
     assert probe.vertical_scroll_position == pytest.approx(scroll_offset, abs=30)
 
+    # Record the vertical_scroll_position for comparison.
+    initial_vertical_scroll_position = probe.vertical_scroll_position
+
+    # We're already at the bottom; call scroll_to_bottom again (See #3872)
+    widget.scroll_to_bottom()
+    await probe.wait_for_scroll_completion()
+    assert probe.vertical_scroll_position == initial_vertical_scroll_position
+
     widget.scroll_to_top()
     await probe.wait_for_scroll_completion()
     await probe.redraw("The document has been explicitly scrolled back to the top")
@@ -99,3 +114,55 @@ async def test_scroll_position(widget, probe):
     # The scroll position back at the origin.
     # Due to scroll bounce etc, this might be slightly off 0
     assert probe.vertical_scroll_position == pytest.approx(0.0, abs=10)
+
+
+async def test_scroll_after_text_change(widget, probe):
+    "Scrolling works after the text has been modified."
+    # The scroll position is at the origin.
+    assert probe.vertical_scroll_position == pytest.approx(0, abs=1)
+
+    # Run a lot of text modifications followed by a scroll
+    for i in range(50):
+        widget.value += f"Line {i}\n"
+        widget.scroll_to_bottom()
+
+    await probe.wait_for_scroll_completion()
+    await probe.redraw(
+        "The document has been modified a lot and scrolled to the bottom"
+    )
+
+    scroll_offset = probe.document_height - probe.height
+    assert probe.vertical_scroll_position == pytest.approx(scroll_offset, abs=30)
+
+
+async def test_mouse_scrolling(widget, probe, other, other_probe):
+    if not probe.supports_simulate_mouse_wheel:
+        pytest.skip("This backend doesn't support mouse wheel simulation")
+
+    "Mouse scrolling only when widget has focus."
+    # Add a lot of content
+    widget.value = "Topline\n" + "Lorem ipsum\n " * 100
+    await probe.redraw("The document now contains a lot of content")
+
+    # The scroll position is at the origin.
+    widget.scroll_to_top()
+    assert probe.vertical_scroll_position == pytest.approx(0, abs=1)
+
+    # simulate down scrolling with focused widget
+    widget.focus()
+    await probe.redraw("The widget should be given focus")
+    assert probe.has_focus
+    probe.simulate_mouse_wheel(-120)
+    await probe.wait_for_scroll_completion()
+    await asyncio.sleep(1)
+    assert probe.vertical_scroll_position == pytest.approx(44, abs=5)
+
+    # simulate down scrolling with unfocused widget
+    # the widget should still scroll because it is not inside a ScrollBar
+    other.focus()
+    await other_probe.redraw("A separate widget should be given focus")
+    assert other_probe.has_focus
+    probe.simulate_mouse_wheel(-120)
+    await probe.wait_for_scroll_completion()
+    await asyncio.sleep(1)
+    assert probe.vertical_scroll_position == pytest.approx(88, abs=5)

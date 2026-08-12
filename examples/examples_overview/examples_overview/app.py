@@ -2,16 +2,18 @@ import os
 import platform
 import subprocess
 import sys
+import webbrowser
 from pathlib import Path
+
+import markdown
 
 import toga
 from toga.constants import COLUMN
-from toga.style import Pack
 
 examples_dir = Path(__file__).parents[2]
 
 
-class ExampleExamplesOverviewApp(toga.App):
+class ExamplesOverviewApp(toga.App):
     # Button callback functions
     def run(self, widget, **kwargs):
         row = self.table.selection
@@ -19,28 +21,33 @@ class ExampleExamplesOverviewApp(toga.App):
         env = os.environ.copy()
         env["PYTHONPATH"] = row.path
 
-        subprocess.run([sys.executable, "-m", row.name], env=env)
+        subprocess.run([sys.executable, "-m", row.name], env=env, check=True)
 
     def open(self, widget, **kwargs):
         row = self.table.selection
 
-        if platform.system() == "Windows":
-            os.startfile(row.path)
-        elif platform.system() == "Darwin":
-            subprocess.run(["open", row.path])
-        else:
-            subprocess.run(["xdg-open", row.path])
+        match platform.system():
+            case "Windows":
+                os.startfile(row.path)
+            case "Darwin":
+                subprocess.run(["open", row.path], check=True)
+            case _:
+                subprocess.run(["xdg-open", row.path], check=True)
 
     def on_example_selected(self, widget):
-        readme_path = widget.selection.path / "README.rst"
+        readme_path = widget.selection.path / "README.md"
 
         try:
-            with open(readme_path) as f:
+            with readme_path.open(encoding="utf-8") as f:
                 readme_text = f.read()
         except OSError:
             readme_text = "README could not be loaded"
 
-        self.info_view.value = readme_text
+        self.info_view.set_content(None, markdown.markdown(readme_text))
+
+    def no_navigation(self, widget, url, **kwargs):
+        webbrowser.open(url)
+        return False
 
     def startup(self):
         # ==== Set up main window ======================================================
@@ -50,7 +57,7 @@ class ExampleExamplesOverviewApp(toga.App):
         # Label for user instructions
         label = toga.Label(
             "Please select an example to run",
-            style=Pack(margin_bottom=10),
+            margin_bottom=10,
         )
 
         # ==== Table with examples =====================================================
@@ -68,48 +75,51 @@ class ExampleExamplesOverviewApp(toga.App):
         self.examples.sort(key=lambda e: e["path"])
 
         self.table = toga.Table(
-            headings=["Name", "Path"],
+            columns=["Name", "Path"],
             data=self.examples,
             on_activate=self.run,
             on_select=self.on_example_selected,
-            style=Pack(margin_bottom=10, flex=1),
+            margin_bottom=10,
+            flex=1,
         )
 
         # Buttons
         self.btn_run = toga.Button(
-            "Run Example", on_press=self.run, style=Pack(flex=1, margin_right=5)
+            "Run Example", on_press=self.run, flex=1, margin_right=5
         )
         self.btn_open = toga.Button(
-            "Open folder", on_press=self.open, style=Pack(flex=1, margin_left=5)
+            "Open folder", on_press=self.open, flex=1, margin_left=5
         )
 
         button_box = toga.Box(children=[self.btn_run, self.btn_open])
 
         # ==== View of example README ==================================================
 
-        self.info_view = toga.MultilineTextInput(
-            placeholder="Please select example", readonly=True, style=Pack(margin=1)
+        self.info_view = toga.WebView(
+            content="Please select example",
+            margin=1,
+            on_navigation_starting=self.no_navigation,
         )
 
         # ==== Assemble layout =========================================================
 
         left_box = toga.Box(
             children=[self.table, button_box],
-            style=Pack(
-                direction=COLUMN,
-                margin=1,
-                flex=1,
-            ),
+            direction=COLUMN,
+            margin=1,
+            flex=1,
         )
 
         split_container = toga.SplitContainer(
             content=[left_box, self.info_view],
-            style=Pack(flex=1),
+            flex=1,
         )
 
         outer_box = toga.Box(
             children=[label, split_container],
-            style=Pack(margin=10, direction=COLUMN, flex=1),
+            margin=10,
+            direction=COLUMN,
+            flex=1,
         )
 
         # Add the content on the main window
@@ -120,11 +130,10 @@ class ExampleExamplesOverviewApp(toga.App):
 
 
 def main():
-    return ExampleExamplesOverviewApp(
+    return ExamplesOverviewApp(
         "Examples Overview", "org.beeware.toga.examples.examples_overview"
     )
 
 
 if __name__ == "__main__":
-    app = main()
-    app.main_loop()
+    main().main_loop()

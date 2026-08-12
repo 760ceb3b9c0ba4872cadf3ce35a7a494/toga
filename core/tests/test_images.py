@@ -1,4 +1,5 @@
 from pathlib import Path
+from re import escape
 
 import PIL.Image
 import pytest
@@ -50,6 +51,16 @@ def test_create_from_file(app, args, kwargs):
     assert image._impl.interface.path == ABSOLUTE_FILE_PATH
 
 
+def test_create_from_bad_file(app):
+    """Creating an image from an invalid file raises an error."""
+    path = Path(__file__).parent / "resources/not_an_image.txt"
+    with pytest.raises(
+        ValueError,
+        match=rf"Unable to load image from {escape(str(path))}",
+    ):
+        toga.Image(path)
+
+
 MISSING_ABSOLUTE_PATH = Path.home() / "does/not/exist/image.jpg"
 MISSING_RELATIVE_PATH = Path("does/not/exist/image.jpg")
 
@@ -71,8 +82,8 @@ MISSING_RELATIVE_PATH = Path("does/not/exist/image.jpg")
         ((), {"path": f"{MISSING_ABSOLUTE_PATH}"}),
         # Relative path
         ((MISSING_RELATIVE_PATH,), {}),
-        ((), {"src": f"{MISSING_RELATIVE_PATH}"}),
-        ((), {"path": f"{MISSING_RELATIVE_PATH}"}),
+        ((), {"src": MISSING_RELATIVE_PATH}),
+        ((), {"path": MISSING_RELATIVE_PATH}),
         # Relative string
         ((f"{MISSING_RELATIVE_PATH}",), {}),
         ((), {"src": f"{MISSING_RELATIVE_PATH}"}),
@@ -111,6 +122,12 @@ def test_create_from_bytes(args, kwargs):
 
     # Image was constructed with data
     assert_action_performed_with(image, "load image data", data=BYTES)
+
+
+def test_create_from_bad_bytes():
+    """An image can be constructed from invalid data raises an error."""
+    with pytest.raises(ValueError, match=r"Unable to load image from data"):
+        toga.Image(b"not an image")
 
 
 def test_create_from_raw():

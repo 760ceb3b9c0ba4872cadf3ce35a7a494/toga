@@ -31,6 +31,10 @@ class TreeProbe(SimpleProbe):
         else:
             return None
 
+    @property
+    def has_focus(self):
+        return self.native.window.firstResponder == self.native_tree
+
     async def expand_tree(self):
         self.native_tree.expandItem(None, expandChildren=True)
         await asyncio.sleep(0.1)
@@ -180,3 +184,6 @@ class TreeProbe(SimpleProbe):
             delay=0.1,
             clickCount=2,
         )
+
+    async def assert_item_mouse_hover(self, row_path):
+        skip("Test not implemented for this platform")

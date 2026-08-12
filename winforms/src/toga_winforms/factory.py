@@ -1,3 +1,5 @@
+import warnings
+
 from toga import NotImplementedWarning
 
 from . import dialogs
@@ -31,58 +33,62 @@ from .widgets.switch import Switch
 from .widgets.table import Table
 from .widgets.textinput import TextInput
 from .widgets.timeinput import TimeInput
+from .widgets.tree import Tree
 from .widgets.webview import WebView
 from .window import MainWindow, Window
 
+warnings.warn(
+    "Factory modules are deprecated. Use 'toga.platform.get_factory' instead.",
+    DeprecationWarning,
+    stacklevel=1,
+)
 
-def not_implemented(feature):
-    NotImplementedWarning.warn("Winforms", feature)  # pragma: nocover
+
+def not_implemented(feature):  # pragma: no cover
+    NotImplementedWarning.warn("Winforms", feature)
 
 
 __all__ = [
-    "not_implemented",
-    "App",
-    "Command",
-    # Resources
-    "Font",
-    "Icon",
-    "Image",
-    "Paths",
-    "dialogs",
-    # Status Icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # Widgets
     "ActivityIndicator",
+    "App",
     "Box",
     "Button",
     "Canvas",
+    "Command",
     "DateInput",
     "DetailedList",
     "Divider",
+    "Font",
+    "Icon",
+    "Image",
     "ImageView",
     "Label",
+    "MainWindow",
     "MapView",
+    "MenuStatusIcon",
     "MultilineTextInput",
     "NumberInput",
     "OptionContainer",
     "PasswordInput",
+    "Paths",
     "ProgressBar",
     "ScrollContainer",
     "Selection",
+    "SimpleStatusIcon",
     "Slider",
     "SplitContainer",
+    "StatusIconSet",
     "Switch",
     "Table",
     "TextInput",
     "TimeInput",
+    "Tree",
     "WebView",
-    # Windows
     "Window",
-    "MainWindow",
+    "dialogs",
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's Winforms backend doesn't implement {name}")

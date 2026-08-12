@@ -3,36 +3,98 @@ from unittest.mock import Mock
 
 from System import Array as WinArray, String as WinString
 
+from toga_winforms import _use_dotnet_core
+from toga_winforms.libs.user32 import GetFocus
+
 
 class DialogsMixin:
     supports_multiple_select_folder = False
 
-    def _setup_dialog_result(self, dialog, char, alt=False, pre_close_test_method=None):
+    async def _close_dialog(
+        self,
+        future,
+        dialog,
+        char,
+        alt=False,
+        char2=None,
+        pre_close_test_method=None,
+    ):
+        # When a dialog is opened, it receives the input focus. An opening event can be
+        # detected by a change in the input focus.
+        focus = GetFocus()
+        while focus == GetFocus():  # noqa ASYNC110
+            await asyncio.sleep(0.01)
+
+        # File dialogs require some extra time to be ready.
+        await self.redraw("Dialog opened", delay=0.2)
+
+        try:
+            if pre_close_test_method:
+                pre_close_test_method(dialog)
+        finally:
+            try:
+                await self.type_character(char, alt=alt)
+                if char2:
+                    # If a second character press is needed, wait a moment
+                    # for the effect of the first character to take effect.
+                    await self.redraw("wait for char", delay=0.1)
+                    await self.type_character(char2)
+            except Exception as e:
+                # An error occurred closing the dialog; that means the dialog
+                # isn't what as expected, so record that in the future.
+                future.set_exception(e)
+
+    async def _open_dialog(
+        self,
+        host_window,
+        future,
+        dialog,
+        char,
+        alt,
+        char2,
+        pre_close_test_method,
+    ):
+
+        asyncio.create_task(
+            self._close_dialog(
+                future,
+                dialog,
+                char,
+                alt,
+                char2,
+                pre_close_test_method,
+            )
+        )
+
+        # A small delay to ensure that _close_dialog has started.
+        await asyncio.sleep(0.1)
+
+        dialog.orig_show(host_window, future)
+
+    def _setup_dialog_result(
+        self,
+        dialog,
+        char,
+        alt=False,
+        char2=None,
+        pre_close_test_method=None,
+    ):
         # Install an overridden show method that invokes the original,
         # but then closes the open dialog.
-        orig_show = dialog._impl.show
+        dialog.orig_show = dialog._impl.show
 
         def automated_show(host_window, future):
-            orig_show(host_window, future)
-
-            async def _close_dialog():
-                # Give the inner event loop a chance to start. The MessageBox dialogs
-                # work with sleep(0), but the file dialogs require it to be positive
-                # for some reason.
-                await asyncio.sleep(0.001)
-
-                try:
-                    if pre_close_test_method:
-                        pre_close_test_method(dialog)
-                finally:
-                    try:
-                        await self.type_character(char, alt=alt)
-                    except Exception as e:
-                        # An error occurred closing the dialog; that means the dialog
-                        # isn't what as expected, so record that in the future.
-                        future.set_exception(e)
-
-            asyncio.create_task(_close_dialog(), name="close-dialog")
+            asyncio.create_task(
+                self._open_dialog(
+                    host_window,
+                    future,
+                    dialog,
+                    char,
+                    alt,
+                    char2,
+                    pre_close_test_method,
+                )
+            )
 
         dialog._impl.show = automated_show
 
@@ -91,7 +153,11 @@ class DialogsMixin:
             dialog._impl.native.SelectedPath = str(
                 result[-1] if multiple_select else result
             )
-            self._setup_dialog_result(dialog, "\n")
+            # Under .NET Core, selecting pressing Enter once
+            # displays the contents of the selected folder.
+            # A second enter is needed to select that folder.
+            char2 = "\n" if _use_dotnet_core else None
+            self._setup_dialog_result(dialog, "\n", char2=char2)
 
     def is_modal_dialog(self, dialog):
         return True

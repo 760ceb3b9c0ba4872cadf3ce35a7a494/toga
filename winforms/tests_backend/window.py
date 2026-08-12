@@ -29,6 +29,8 @@ class WindowProbe(BaseProbe, DialogsMixin):
     supports_placement = True
     supports_as_image = True
     supports_focus = True
+    fullscreen_presentation_equal_size = True
+    maximize_fullscreen_presentation_equal_size = False
 
     def __init__(self, app, window):
         self.app = app
@@ -125,8 +127,7 @@ class WindowProbe(BaseProbe, DialogsMixin):
         for control in self.native.Controls:
             if isinstance(control, ToolStrip) and not isinstance(control, MenuStrip):
                 return control
-        else:
-            return None
+        return None
 
     def has_toolbar(self):
         return self._native_toolbar() is not None
@@ -137,7 +138,7 @@ class WindowProbe(BaseProbe, DialogsMixin):
     def assert_is_toolbar_separator(self, index, section=False):
         assert isinstance(self._native_toolbar_item(index), ToolStripSeparator)
 
-    def assert_toolbar_item(self, index, label, tooltip, has_icon, enabled):
+    def assert_toolbar_item(self, index, separators, label, tooltip, has_icon, enabled):
         item = self._native_toolbar_item(index)
         assert item.Text == label
         assert item.ToolTipText == tooltip

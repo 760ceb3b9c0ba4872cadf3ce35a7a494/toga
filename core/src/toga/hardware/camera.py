@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from toga.constants import FlashMode
 from toga.handlers import AsyncResult, PermissionResult
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 
 if TYPE_CHECKING:
     from toga.app import App
@@ -46,7 +46,7 @@ class CameraDevice:
 
 class Camera:
     def __init__(self, app: App):
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._app = app
         self._impl = self.factory.Camera(self)
 
@@ -60,7 +60,7 @@ class Camera:
         """Does the user have permission to use camera devices?
 
         If the platform requires the user to explicitly confirm permission, and
-        the user has not yet given permission, this will return ``False``.
+        the user has not yet given permission, this will return `False`.
         """
         return self._impl.has_permission()
 
@@ -112,8 +112,8 @@ class Camera:
             may be able to change the camera used to capture the image at runtime.
         :param flash: The initial flash mode to use; defaults to "auto". Depending on
             the hardware available, this may be modified by the user at runtime.
-        :returns: An asynchronous result; when awaited, returns the :any:`toga.Image`
-            captured by the camera, or ``None`` if the photo was  cancelled.
+        :returns: An asynchronous result; when awaited, returns the [`toga.Image`][]
+            captured by the camera, or `None` if the photo was  cancelled.
         :raises PermissionError: if the app does not have permission to use the camera.
         """
         photo = PhotoResult(None)

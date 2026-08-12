@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from warnings import catch_warnings, filterwarnings
 
 import pytest
@@ -10,11 +11,11 @@ from travertino.properties.choices import Choices
 from travertino.properties.validated import validated_property
 from travertino.style import BaseStyle
 
-from .utils import apply_dataclass, mock_apply
+from .utils import mock_apply
 
 
 @mock_apply
-@apply_dataclass
+@dataclass(kw_only=True, repr=False)
 class Style(BaseStyle):
     none: str = validated_property(NONE, REBECCAPURPLE, initial=NONE)
     allow_string: str = validated_property(string=True, initial="start")
@@ -32,13 +33,23 @@ class Style(BaseStyle):
     )
     string_symbol: str = validated_property(TOP, NONE)
 
+    def _apply(self, names):
+        pass
+
+    def layout(self, viewport):
+        pass
+
 
 with catch_warnings():
     filterwarnings("ignore", category=DeprecationWarning)
 
     @mock_apply
     class DeprecatedStyle(BaseStyle):
-        pass
+        def _apply(self, names):
+            pass
+
+        def layout(self, viewport):
+            pass
 
     DeprecatedStyle.validated_property(
         "none", choices=Choices(NONE, REBECCAPURPLE), initial=NONE

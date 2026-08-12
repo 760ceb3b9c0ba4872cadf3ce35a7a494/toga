@@ -2,16 +2,15 @@ import asyncio
 
 import toga
 from toga.constants import COLUMN, ROW
-from toga.style import Pack
 
 from .translations import bee_translations
 
 
-class ExampleDetailedListApp(toga.App):
+class DetailedListApp(toga.App):
     # Detailed list callback functions
     def on_select_handler(self, widget, **kwargs):
         row = widget.selection
-        self.label.text = (
+        self.input.value = (
             f"Bee is {getattr(row, 'title', '')} in {getattr(row, 'subtitle', '')}"
             if row is not None
             else "No row selected"
@@ -27,18 +26,18 @@ class ExampleDetailedListApp(toga.App):
         self.dl.on_secondary_action = self.on_visit_handler if switch.value else None
 
     async def on_refresh_handler(self, widget, **kwargs):
-        self.label.text = "Refreshing list..."
+        self.input.value = "Refreshing list..."
         # We are using a local data source, so there's literally no reason
         # to use refresh. However, for demonstration purposes, lets pretend
         # that we're getting the data from an API, which takes 1s to respond.
         await asyncio.sleep(1)
-        self.label.text = "List was refreshed."
+        self.input.value = "List was refreshed."
 
     def on_delete_handler(self, widget, row, **kwargs):
         self.dl.data.remove(row)
 
     def on_visit_handler(self, widget, row, **kwargs):
-        self.label.text = "We're not a travel agent."
+        self.input.value = "We're not a travel agent."
 
     # Button callback functions
     def insert_handler(self, widget, **kwargs):
@@ -60,47 +59,46 @@ class ExampleDetailedListApp(toga.App):
         self.main_window = toga.MainWindow()
 
         # Buttons
-        btn_style = Pack(flex=1, margin=10)
+        btn_style = {"flex": 1, "margin": 10}
         self.btn_insert = toga.Button(
-            "Insert Row", on_press=self.insert_handler, style=btn_style
+            "Insert Row", on_press=self.insert_handler, **btn_style
         )
         self.btn_remove = toga.Button(
-            "Remove Row", on_press=self.remove_handler, style=btn_style
+            "Remove Row", on_press=self.remove_handler, **btn_style
         )
         self.btn_box = toga.Box(
-            children=[self.btn_insert, self.btn_remove], style=Pack(direction=ROW)
+            children=[self.btn_insert, self.btn_remove], direction=ROW
         )
 
         # Switches to enable/disable actions
-        switch_style = Pack(margin=10)
         self.switch_box = toga.Box(
-            style=Pack(direction=ROW),
+            direction=ROW,
             children=[
-                toga.Box(style=Pack(flex=1)),  # Spacer
+                toga.Box(flex=1),  # Spacer
                 toga.Switch(
                     "Delete",
                     value=True,
                     on_change=self.on_delete_switch,
-                    style=switch_style,
+                    margin=10,
                 ),
                 toga.Switch(
                     "Visit",
                     value=True,
                     on_change=self.on_visit_switch,
-                    style=switch_style,
+                    margin=10,
                 ),
                 toga.Switch(
                     "Refresh",
                     value=True,
                     on_change=self.on_refresh_switch,
-                    style=switch_style,
+                    margin=10,
                 ),
-                toga.Box(style=Pack(flex=1)),  # Spacer
+                toga.Box(flex=1),  # Spacer
             ],
         )
 
-        # Label to show responses.
-        self.label = toga.Label("Ready.")
+        # TextInput to show responses.
+        self.input = toga.TextInput(placeholder="Ready", margin_top=5)
 
         self.dl = toga.DetailedList(
             data=[
@@ -121,17 +119,20 @@ class ExampleDetailedListApp(toga.App):
             secondary_action="Visit",
             on_secondary_action=self.on_visit_handler,
             on_refresh=self.on_refresh_handler,
-            style=Pack(flex=1),
+            flex=1,
         )
 
         # Outermost box
         outer_box = toga.Box(
-            children=[self.btn_box, self.switch_box, self.dl, self.label],
-            style=Pack(
-                flex=1,
-                direction=COLUMN,
-                margin=10,
-            ),
+            children=[
+                self.btn_box,
+                self.switch_box,
+                self.dl,
+                self.input,
+            ],
+            flex=1,
+            direction=COLUMN,
+            margin=10,
         )
 
         # Add the content on the main window
@@ -142,11 +143,8 @@ class ExampleDetailedListApp(toga.App):
 
 
 def main():
-    return ExampleDetailedListApp(
-        "Detailed List", "org.beeware.toga.examples.detailedlist"
-    )
+    return DetailedListApp("Detailed List", "org.beeware.toga.examples.detailedlist")
 
 
 if __name__ == "__main__":
-    app = main()
-    app.main_loop()
+    main().main_loop()

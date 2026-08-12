@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import Mock
 
 import pytest
@@ -9,8 +10,8 @@ from toga_dummy.utils import assert_action_performed_with
 
 
 class MyDoc(toga.Document):
-    description = "My Document"
-    extensions = ["doc"]
+    description: str = "My Document"
+    extensions: ClassVar[list[str]] = ["doc"]
 
     def create(self):
         self.main_window = Mock(title="Mock Window")
@@ -26,8 +27,8 @@ class MyDoc(toga.Document):
 
 
 class OtherDoc(toga.Document):
-    description = "Other Document"
-    extensions = ["other"]
+    description: str = "Other Document"
+    extensions: ClassVar[list[str]] = ["other"]
 
     def create(self):
         self.main_window = Mock(title="Mock Window")
@@ -105,8 +106,8 @@ async def test_empty_extensions():
     """If a document class doesn't define extensions, an error is raised."""
 
     class BadDoc(toga.Document):
-        description = "Bad Document"
-        extensions = []
+        description: str = "Bad Document"
+        extensions: ClassVar[list[str]] = []
 
         def create(self):
             self.main_window = Mock(title="Mock Window")
@@ -131,7 +132,7 @@ def test_open_absolute_document(app, converter, tmp_path):
     doc = MyDoc(app)
 
     path = tmp_path / "doc.mydoc"
-    path.write_text("sample file")
+    path.write_text("sample file", encoding="utf-8")
 
     # Read the file
     doc.open(converter(path))
@@ -154,7 +155,7 @@ def test_open_relative_document(app, converter, tmp_path):
         os.chdir(tmp_path / "cwd")
 
         path = tmp_path / "cwd/doc.mydoc"
-        path.write_text("sample file")
+        path.write_text("sample file", encoding="utf-8")
 
         # Read the file
         doc.open(converter(path))

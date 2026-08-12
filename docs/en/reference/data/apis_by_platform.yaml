@@ -1,0 +1,357 @@
+Application components:
+  path: application
+
+  App:
+    description: The top-level application object.
+    display: table
+    beta:
+      - web
+      - textual
+
+  Window:
+    description: A system-managed container of widgets.
+    beta:
+      - web
+      - textual
+
+  MainWindow:
+    description: A window that can use all window-level UI elements.
+    beta:
+      - web
+      - textual
+
+  DocumentWindow:
+    description: A window bound to a [Document](/reference/api/data-representation/document.md) instance.
+    unsupported:
+      - iOS
+      - android
+      - web
+      - textual
+
+  Command:
+    description: App functionality invoked from menus or toolbars.
+    display: table
+    unsupported:
+      - iOS
+      - web
+      - textual
+
+  Dialogs:
+    description: Short-lived windows asking for user input.
+    display: table
+    beta:
+      - web
+      - textual
+
+  Status icons:
+    description: Icons representing status while the app isn't visible.
+    file_name: status-icons
+    unsupported:
+      - iOS
+      - android
+      - web
+      - textual
+
+  Platform:
+    description: Details about the platform on which the app is running.
+    display: Table
+
+Widgets:
+  ActivityIndicator:
+    description: An activity indicator for a task of indeterminate length.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  Button:
+    description: A button that can be pressed or clicked.
+    beta:
+      - web
+      - textual
+
+  Canvas:
+    description: A drawing area for 2D vector graphics.
+    unsupported:
+      - web
+      - textual
+
+  DateInput:
+    description: A widget to select a calendar date.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  DetailedList:
+    description: An ordered list with an icon, heading, and text for each item.
+    unsupported:
+      - web
+      - textual
+
+  Divider:
+    description: A visual layout separator.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  ImageView:
+    description: Displays an [Image](/reference/api/resources/image/index.md).
+    unsupported:
+      - web
+      - textual
+
+  Label:
+    description: A text label.
+    beta:
+      - web
+      - textual
+
+  MapView:
+    description: A zoomable map that can be annotated with location pins.
+    unsupported:
+      - web
+      - textual
+
+  MultilineTextInput:
+    description: A scrollable panel for displaying and editing multiple lines of text.
+    unsupported:
+      - web
+      - textual
+
+  NumberInput:
+    description: A text input that is limited to numeric input.
+    unsupported:
+      - web
+      - textual
+
+  PasswordInput:
+    description: For entering a password; obscures entered text.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  ProgressBar:
+    description: A horizontal bar to visualize task progress.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  Selection:
+    description: Allows a single choice from a list.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  Slider:
+    description: A draggable marker for selecting within a range.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  Switch:
+    description: A labeled on/off button.
+    beta:
+      - web
+      - textual
+
+  Table:
+    description: Displays columns of tabular data.
+    beta:
+      - android
+    unsupported:
+      - iOS
+      - web
+      - textual
+
+  TextInput:
+    description: Allows editing of a single line of text.
+    beta:
+      - web
+      - textual
+
+  TimeInput:
+    description: For selecting a clock time.
+    beta:
+      - web
+    unsupported:
+      - gtk
+
+  Tree:
+    description: A hierarchical tree of tabular data.
+    unsupported:
+      - iOS
+      - android
+      - web
+      - textual
+
+  WebView:
+    description: An embedded web browser.
+    unsupported:
+      - web
+      - textual
+
+  Widget:
+    description: The abstract base class of all widgets.
+    beta:
+      - web
+      - textual
+    display: table
+
+
+Container widgets:
+  path: containers
+
+  Box:
+    description: A container for laying out other widgets.
+    beta:
+      - web
+      - textual
+    display: table
+
+  ScrollContainer:
+    description: A container that can display a layout larger than its own area.
+    beta:
+      - web
+    unsupported:
+      - textual
+
+  SplitContainer:
+    description: A container divided into two panels with a movable border.
+    unsupported:
+      - iOS
+      - android
+      - web
+      - textual
+
+  OptionContainer:
+    description: A container for displaying multiple labeled tabs of content.
+    unsupported:
+      - web
+      - textual
+
+
+Style:
+  Pack:
+    description: Toga's style and layout engine.
+    display: hide
+
+
+Data representation:
+  Color:
+    description: A representation of a color.
+    display: hide
+
+  Constants:
+    description: Symbolic constants used by various APIs.
+    display: hide
+
+  Document:
+    description: Represents a file on disk that will be displayed in one or more windows.
+    display: table
+    unsupported:
+      - iOS
+      - android
+      - web
+      - textual
+
+  Paths:
+    description: Provides platform-appropriate filesystem locations.
+    display: table
+    beta:
+      - textual
+    unsupported:
+      - web
+
+  Source:
+    description: Base abstraction of managed data.
+    display: hide
+
+  ListSource:
+    description: Abstractions of list-like managed data.
+    display: hide
+
+  TreeSource:
+    description: Abstractions of tree-like managed data.
+    display: hide
+
+  ValueSource:
+    description: Abstractions of managed atomic values.
+    display: hide
+
+  Column:
+    description: Abstractions of tabular columns.
+    display: hide
+
+  Types:
+    description: Utility data structures used by Toga APIs.
+    display: hide
+
+  Validators:
+    description: Mechanisms for validating that input meets a given set of criteria.
+    display: hide
+
+  DrawingAction:
+    description: Representation of a drawing action performed on a [Canvas](/reference/api/widgets/canvas.md).
+    display: hide
+
+
+Resources:
+  Font:
+    description: A representation of a font.
+    display: table
+    unsupported:
+      - web
+      - textual
+
+  Icon:
+    description: A small image for providing context to a widget.
+    display: table
+    beta:
+      - textual
+    unsupported:
+      - web
+
+  Image:
+    description: Graphical content of arbitrary size.
+    display: table
+    unsupported:
+      - web
+      - textual
+
+
+Hardware:
+  Camera:
+    description: A sensor that can capture photos and/or video.
+    display: table
+    unsupported:
+      - gtk
+      - winforms
+      - web
+      - textual
+      - qt
+
+  Keys:
+    description: Symbolic representation of keys used for keyboard shortcuts.
+    display: hide
+
+  Location:
+    description: A sensor that can capture the geographical location of the device.
+    display: table
+    unsupported:
+      - winforms
+      - web
+      - textual
+      - qt
+
+  Screen:
+    description: A representation of a screen attached to a device.
+    display: table
+    beta:
+      - web
+      - textual

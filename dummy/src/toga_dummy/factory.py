@@ -44,56 +44,52 @@ def not_implemented(feature):
 
 
 __all__ = [
-    "not_implemented",
-    "App",
-    "DocumentApp",
-    "Command",
-    "Font",
-    "Icon",
-    "Image",
-    "Paths",
-    "dialogs",
-    # Hardware
-    "Camera",
-    "Location",
-    # Status Icons
-    "MenuStatusIcon",
-    "SimpleStatusIcon",
-    "StatusIconSet",
-    # Widgets
     "ActivityIndicator",
+    "App",
     "Box",
     "Button",
+    "Camera",
     "Canvas",
+    "Command",
     "DateInput",
     "DetailedList",
     "Divider",
+    "DocumentApp",
+    "Font",
+    "Icon",
+    "Image",
     "ImageView",
     "Label",
+    "Location",
+    "MainWindow",
     "MapView",
+    "MenuStatusIcon",
     "MultilineTextInput",
     "NumberInput",
     "OptionContainer",
     "PasswordInput",
+    "Paths",
     "ProgressBar",
     "ScrollContainer",
     "Selection",
+    "SimpleStatusIcon",
     "Slider",
     "SplitContainer",
+    "StatusIconSet",
     "Switch",
     "Table",
     "TextInput",
     "TimeInput",
     "Tree",
     "WebView",
-    # Windows
-    "MainWindow",
-    "Window",
     # Widget is also required for testing purposes
     # Real backends shouldn't expose Widget.
     "Widget",
+    "Window",
+    "dialogs",
+    "not_implemented",
 ]
 
 
-def __getattr__(name):  # pragma: no cover
+def __getattr__(name):
     raise NotImplementedError(f"Toga's Dummy backend doesn't implement {name}")

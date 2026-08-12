@@ -1,9 +1,14 @@
-import re
 from importlib import import_module
 
-import pytest
-
 import toga
+
+from .conftest import skip_on_backends
+
+skip_on_backends(
+    "toga_textual",
+    reason="Icon assertions are not implemented on Textual.",
+    allow_module_level=True,
+)
 
 
 def icon_probe(app, image):
@@ -44,7 +49,6 @@ async def test_platform_icon(app):
 
 
 async def test_bad_icon_file(app):
-    """If a file isn't a loadable icon, an error is raised"""
-    escaped_path = re.escape(str(app.paths.app / "resources/icons/bad"))
-    with pytest.raises(ValueError, match=rf"Unable to load icon from {escaped_path}"):
-        toga.Icon("resources/icons/bad")
+    """If a file isn't a loadable icon, the default icon is used."""
+    probe = icon_probe(app, toga.Icon("resources/icons/bad"))
+    probe.assert_default_icon_content()

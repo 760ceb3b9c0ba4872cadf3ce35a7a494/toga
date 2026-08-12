@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 import toga
-from toga.platform import get_platform_factory
+from toga.platform import get_factory
 from toga.style import Pack
 from toga_dummy.utils import (
     EventLog,
@@ -26,7 +26,7 @@ from ..utils import ExampleLeafWidget, ExampleWidget
 # exception.
 class WidgetSubclassWithoutCreate(toga.Widget):
     def __init__(self, *args, **kwargs):
-        self.factory = get_platform_factory()
+        self.factory = get_factory()
         self._impl = self.factory.Widget(interface=self)
 
         super().__init__(*args, **kwargs)
@@ -349,8 +349,9 @@ def test_reparent_child_to_self(widget):
     # as the widget was already a child
     assert_action_not_performed(widget, "add child")
 
-    # The widget's layout has been refreshed
-    assert_action_performed_with(widget, "refresh")
+    # The widget's layout has *not* been refreshed,
+    # as the widget was already a child
+    assert_action_not_performed(widget, "refresh")
 
 
 def test_insert_child_into_leaf():
@@ -643,8 +644,9 @@ def test_insert_reparent_child_to_self(widget):
     # as the widget was already a child
     assert_action_not_performed(widget, "insert child")
 
-    # The widget's layout has been refreshed
-    assert_action_performed_with(widget, "refresh")
+    # The widget's layout has *not* been refreshed,
+    # as the widget was already a child
+    assert_action_not_performed(widget, "refresh")
 
 
 def test_remove_child_from_leaf():
@@ -1037,7 +1039,7 @@ def test_reset_app(app, widget):
     assert attribute_value(widget, "app") is None
 
 
-def test_set_new_app(app, widget):
+async def test_set_new_app(app, widget):
     """A widget can be assigned to a different app."""
     # Assign the widget to an app. It won't appear in the registry, as
     # it hasn't been assigned to a window
